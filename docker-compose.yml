@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # Spring Boot Backend
   backend:
