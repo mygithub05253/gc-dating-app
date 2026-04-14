@@ -26,6 +26,11 @@ spring:
 server:
   port: 8080
 
+app:
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+
 ---
 # 개발 환경
 spring:
@@ -35,6 +40,13 @@ spring:
 
   jpa:
     show-sql: true
+
+app:
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:8080
+      - http://10.0.2.2:8080
 
 springdoc:
   swagger-ui:
@@ -65,6 +77,12 @@ spring:
 
 server:
   forward-headers-strategy: native
+
+app:
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - ${ADMIN_ORIGIN:}
 
 ai:
   service:
