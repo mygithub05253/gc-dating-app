@@ -16,13 +16,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [initAuth]);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && pathname !== '/admin/login') {
+    if (!isLoading && !isAuthenticated && pathname !== '/admin/login' && pathname !== '/admin/health-check') {
       router.push('/admin/login');
     }
   }, [isLoading, isAuthenticated, pathname, router]);
 
-  // 로그인 페이지는 사이드바/헤더 없이 렌더링
-  if (pathname === '/admin/login') {
+  // 로그인, 헬스체크 페이지는 사이드바/헤더 없이 렌더링
+  if (pathname === '/admin/login' || pathname === '/admin/health-check') {
     return <>{children}</>;
   }
 
