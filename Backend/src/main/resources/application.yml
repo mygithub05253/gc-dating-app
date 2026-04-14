@@ -52,6 +52,25 @@ spring:
       ddl-auto: validate
     show-sql: false
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 15MB
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASS}
+
+server:
+  forward-headers-strategy: native
+
+ai:
+  service:
+    url: ${AI_SERVICE_URL:http://ai:8000}
+  internal-key: ${INTERNAL_API_KEY:}
+
 springdoc:
   swagger-ui:
     enabled: false

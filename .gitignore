@@ -35,6 +35,9 @@ firebase-service-account.json
 .claude/
 .mcp.json
 
+# Nginx SSL 인증서
+nginx/certs/
+
 # Misc
 *.tmp
 *.swp

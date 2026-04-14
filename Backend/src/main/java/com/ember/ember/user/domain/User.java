@@ -50,7 +50,7 @@ public class User extends BaseEntity {
 
     @Column(nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
-    private UserRole role = UserRole.GUEST;
+    private UserRole role = UserRole.ROLE_GUEST;
 
     @Column(name = "onboarding_step", nullable = false)
     private Integer onboardingStep = 0;
@@ -60,6 +60,9 @@ public class User extends BaseEntity {
 
     @Column(name = "last_nickname_changed_at")
     private LocalDateTime lastNicknameChangedAt;
+
+    @Column(name = "tutorial_completed_at")
+    private LocalDateTime tutorialCompletedAt;
 
     @Column(name = "deactivated_at")
     private LocalDateTime deactivatedAt;
@@ -84,10 +87,10 @@ public class User extends BaseEntity {
     }
 
     public enum UserStatus {
-        ACTIVE, GUEST, SUSPEND_7D, BANNED, DEACTIVATED
+        ACTIVE, GUEST, SUSPEND_7D, SUSPEND_30D, BANNED, DEACTIVATED
     }
 
     public enum UserRole {
-        GUEST, USER, ADMIN, SUPER_ADMIN
+        ROLE_GUEST, ROLE_USER
     }
 }

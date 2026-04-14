@@ -1,0 +1,57 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/ember
+
+            # 1. 최신 코드
+            git pull origin main
+
+            # 2. .env 재생성
+            cat << EOF > .env
+            SPRING_PROFILES_ACTIVE=prod
+            DB_HOST=${{ secrets.DB_HOST }}
+            DB_PORT=${{ secrets.DB_PORT }}
+            DB_NAME=${{ secrets.DB_NAME }}
+            DB_USERNAME=${{ secrets.DB_USERNAME }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            REDIS_HOST=redis
+            REDIS_PORT=6379
+            RABBITMQ_HOST=rabbitmq
+            RABBITMQ_PORT=5672
+            RABBITMQ_USER=${{ secrets.RABBITMQ_USER }}
+            RABBITMQ_PASS=${{ secrets.RABBITMQ_PASS }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            FIREBASE_CREDENTIALS_PATH=firebase-service-account.json
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            OPENAI_MODEL=${{ secrets.OPENAI_MODEL }}
+            EOF
+            chmod 600 .env
+
+            # 3. Firebase 키 복원
+            echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_B64 }}" | \
+              base64 -d > Backend/src/main/resources/firebase-service-account.json
+            chmod 600 Backend/src/main/resources/firebase-service-account.json
+
+            # 4. 단계별 배포 스크립트 실행
+            chmod +x scripts/deploy.sh
+            ./scripts/deploy.sh
+
+            # 5. 이전 이미지 정리
+            docker image prune -f
