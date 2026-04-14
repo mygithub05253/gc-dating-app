@@ -6,12 +6,26 @@
 
 ---
 
+## 서버 주소
+
+| 용도 | URL |
+|------|-----|
+| API 서버 | `https://ember-app.duckdns.org` |
+| 헬스체크 | `https://ember-app.duckdns.org/health` |
+| WebSocket | `wss://ember-app.duckdns.org/ws/chat` |
+| 관리자 헬스체크 | Vercel URL + `/admin/health-check` |
+
+> HTTPS 적용 완료 (Let's Encrypt SSL 인증서, 자동 갱신)
+> Dynamic DNS로 IP 변경 자동 대응 — IP가 바뀌어도 주소 그대로
+
+---
+
 ## 배포 구조
 
 ```
 GitHub main 머지 → GitHub Actions (자동) → AWS EC2 서버 배포
                                           ↓
-                              Nginx (외부 요청 수신)
+                              Nginx (HTTPS 443 수신)
                                 ├── Backend (Spring Boot)
                                 ├── AI (FastAPI)
                                 ├── Redis
@@ -27,7 +41,8 @@ DB → Supabase Cloud (PostgreSQL)
 ### 서버 (EC2)
 - AWS EC2 인스턴스 생성 + Docker 환경 구성
 - **5개 컨테이너** 정상 가동 (Nginx, Backend, AI, Redis, RabbitMQ)
-- 서버 헬스체크 확인: `http://3.35.11.196/health` → ok
+- **HTTPS 적용 완료** (Let's Encrypt + DuckDNS)
+- Dynamic DNS 설정 (`ember-app.duckdns.org`, IP 변경 자동 대응)
 
 ### CI/CD
 - **main 브랜치에 머지하면 자동 배포** (GitHub Actions)
@@ -66,14 +81,12 @@ DB → Supabase Cloud (PostgreSQL)
 - Backend와 통신: Backend가 `http://ai:8000`으로 호출 (Docker 내부 네트워크)
 
 ### Frontend 팀 (Flutter)
-- EC2 서버 API 주소: `http://3.35.11.196`
+- API 서버: `https://ember-app.duckdns.org`
 - 현재 **헬스체크 API만 동작** (`GET /api/health`)
 - 인증 API 등 핵심 API는 Backend 팀이 구현 중
-- WebSocket 채팅: `ws://3.35.11.196/ws/chat` (STOMP)
+- WebSocket 채팅: `wss://ember-app.duckdns.org/ws/chat` (STOMP)
 - Android 에뮬레이터에서 로컬 테스트: `http://10.0.2.2:8080`
-- **HTTPS는 아직 미적용** (도메인 확보 후 전환 예정)
-  - Android: `AndroidManifest.xml`에 `usesCleartextTraffic="true"` 필요
-  - iOS: `Info.plist`에 `NSAllowsArbitraryLoads = true` 필요
+- **HTTPS 적용 완료** — cleartext 설정 불필요
 
 ---
 
@@ -85,7 +98,6 @@ DB → Supabase Cloud (PostgreSQL)
 | 일기/매칭/교환일기 API | 미구현 | Backend |
 | AI 성격 분석/매칭 로직 | 미구현 | AI |
 | Flutter ↔ Backend 실제 연결 테스트 | 미진행 | Frontend + Backend |
-| HTTPS (도메인 + SSL) | 미적용 | Backend |
 | WebSocket 채팅 JWT 인증 | 미구현 | Backend |
 
 ---
@@ -97,7 +109,7 @@ DB → Supabase Cloud (PostgreSQL)
 2. 작업 후 커밋 & 푸시
 3. GitHub에서 PR 생성
 4. main에 머지 → 자동 배포 (5~10분)
-5. http://3.35.11.196/health 로 서버 상태 확인
+5. https://ember-app.duckdns.org/health 로 서버 상태 확인
 ```
 
 **main에 직접 push 금지!** 반드시 PR 머지로.
@@ -111,12 +123,7 @@ DB → Supabase Cloud (PostgreSQL)
 ### 인스턴스 재시작 방법
 1. AWS 콘솔 로그인 → EC2 → 인스턴스 선택
 2. **인스턴스 상태** → **시작**
-3. Running 후 **퍼블릭 IP 확인** (바뀔 수 있음)
+3. Running 후 약 5분 대기 (DuckDNS가 새 IP 자동 반영)
 
-### IP가 바뀌었을 때 업데이트할 곳 (3곳)
-1. **GitHub Secrets** → `EC2_HOST` 값 변경 (레포 Settings → Secrets)
-2. **Vercel** → `BACKEND_URL` 값 변경 (프로젝트 Settings → Environment Variables)
-3. **Flutter** → API Base URL 변경
-
-> Elastic IP를 할당하면 IP가 고정되어 이 작업이 불필요해집니다.
-> AWS 콘솔 → EC2 → 탄력적 IP → 할당 → 인스턴스에 연결 (인스턴스에 연결된 상태에서는 무료)
+> Dynamic DNS(DuckDNS) 설정 완료 — IP가 바뀌어도 `ember-app.duckdns.org` 주소는 그대로.
+> GitHub Secrets, Vercel, Flutter 주소 변경 불필요.
