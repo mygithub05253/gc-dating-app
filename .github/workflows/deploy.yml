@@ -3,6 +3,13 @@ name: Deploy to EC2
 on:
   push:
     branches: [main]
+    paths:
+      - 'Backend/**'
+      - 'ai/**'
+      - 'nginx/**'
+      - 'scripts/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 jobs:
