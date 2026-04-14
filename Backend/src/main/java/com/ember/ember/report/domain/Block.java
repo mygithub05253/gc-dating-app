@@ -23,4 +23,12 @@ public class Block extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "blocked_user_id", nullable = false)
     private User blockedUser;
+
+    @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    private BlockStatus status = BlockStatus.ACTIVE;
+
+    public enum BlockStatus {
+        ACTIVE, UNBLOCKED, ADMIN_CANCELLED
+    }
 }

@@ -37,6 +37,12 @@ public class CoupleRequest extends BaseEntity {
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
+    @Column(name = "last_reminder_at")
+    private LocalDateTime lastReminderAt;
+
+    @Column(name = "reminder_count", nullable = false)
+    private Short reminderCount = 0;
+
     public enum CoupleRequestStatus {
         PENDING, ACCEPTED, REJECTED, EXPIRED, CANCELLED
     }

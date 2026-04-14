@@ -8,7 +8,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "next_step_choices",
+@Table(name = "exchange_next_step_choices",
         uniqueConstraints = @UniqueConstraint(columnNames = {"room_id", "user_id", "round_number"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -37,6 +37,6 @@ public class NextStepChoice extends BaseEntity {
     private LocalDateTime chosenAt;
 
     public enum Choice {
-        CHAT, CONTINUE, END
+        CHAT, CONTINUE
     }
 }

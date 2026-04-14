@@ -33,6 +33,12 @@ public class SanctionHistory extends BaseEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String reason;
 
+    @Column(name = "reason_category", length = 30)
+    private String reasonCategory;
+
+    @Column(name = "previous_status", length = 20)
+    private String previousStatus;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "report_id")
     private Report report;
@@ -44,6 +50,6 @@ public class SanctionHistory extends BaseEntity {
     private LocalDateTime endedAt;
 
     public enum SanctionType {
-        SUSPEND_7D, BANNED, RELEASED, WARNING
+        WARNING, SUSPEND_7D, SUSPEND_30D, SUSPEND_PERMANENT, FORCE_WITHDRAW, UNBLOCK
     }
 }

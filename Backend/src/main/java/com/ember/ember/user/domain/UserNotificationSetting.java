@@ -21,8 +21,8 @@ public class UserNotificationSetting extends BaseEntity {
     @Column(name = "matching_enabled", nullable = false)
     private Boolean matchingEnabled = true;
 
-    @Column(name = "diary_enabled", nullable = false)
-    private Boolean diaryEnabled = true;
+    @Column(name = "diary_turn_enabled", nullable = false)
+    private Boolean diaryTurnEnabled = true;
 
     @Column(name = "chat_enabled", nullable = false)
     private Boolean chatEnabled = true;
@@ -30,6 +30,9 @@ public class UserNotificationSetting extends BaseEntity {
     @Column(name = "ai_analysis_enabled", nullable = false)
     private Boolean aiAnalysisEnabled = true;
 
-    @Column(name = "event_enabled", nullable = false)
-    private Boolean eventEnabled = true;
+    @Column(name = "couple_enabled", nullable = false)
+    private Boolean coupleEnabled = true;
+
+    @Column(name = "system_enabled", nullable = false)
+    private Boolean systemEnabled = true;
 }

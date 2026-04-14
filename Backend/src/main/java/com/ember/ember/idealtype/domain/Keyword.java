@@ -4,6 +4,8 @@ import com.ember.ember.global.jpa.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "keywords")
 @Getter
@@ -17,8 +19,14 @@ public class Keyword extends BaseEntity {
     @Column(nullable = false, unique = true, length = 30)
     private String label;
 
-    @Column(length = 20)
+    @Column(nullable = false, length = 20)
     private String category;
+
+    @Column(nullable = false, precision = 3, scale = 2)
+    private BigDecimal weight = new BigDecimal("0.50");
+
+    @Column(name = "display_order", nullable = false)
+    private Integer displayOrder = 0;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
