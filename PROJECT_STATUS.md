@@ -81,6 +81,32 @@ DB → Supabase Cloud (PostgreSQL)
 - Docker, 서버 접속 몰라도 됨. **코드만 작성하면 자동 반영**
 - Backend와 통신: Backend가 `http://ai:8000`으로 호출 (Docker 내부 네트워크)
 
+#### 주의사항 (반드시 지켜야 배포가 정상 동작합니다)
+- **`main.py` 파일명 변경 금지** — Dockerfile에서 `uvicorn main:app`으로 실행하므로 이름 바꾸면 배포 실패
+- **`app = FastAPI()` 변수명 변경 금지** — `uvicorn main:app`에서 `app` 객체를 참조하므로 변경 시 배포 실패
+- **`/health` 엔드포인트 유지 필수** — 배포 스크립트가 `/health`로 AI 서버 정상 기동을 확인함
+- **`/warmup` 엔드포인트 유지 필수** — 배포 시 모델 사전 로딩에 사용됨
+
+#### 구현해야 할 AI 내부 API (Backend가 호출)
+| 엔드포인트 | 방식 | 설명 | 사용 모델 |
+|------------|------|------|-----------|
+| `POST /api/diary/analyze` | 비동기 (RabbitMQ) | 일기 분석 → 6종 출력 (summary, category, emotionTags 등) | KcELECTRA |
+| `POST /api/matching/calculate` | 동기 (10초 타임아웃) | 유사도 매칭 점수 + 브리핑 생성 | KoSimCSE |
+| `POST /api/exchange/report` | 비동기 (RabbitMQ) | 교환일기 4턴 완료 후 공통점 리포트 생성 | KcELECTRA + KoSimCSE + TF-IDF |
+| `POST /api/content/scan` | 동기 (3초 타임아웃) | 금칙어 + 외부 연락처 탐지 (정규식 기반) | 모델 미사용 |
+
+#### 모델 관련
+- 현재 HuggingFace에서 **KcELECTRA** (`beomi/KcELECTRA-base`), **KoSimCSE** (`BM-K/KoSimCSE-roberta`) 프리트레인 모델을 로드하는 구조
+- 팀에서 **파인튜닝한 모델을 사용할 경우**, `ai/models.py`에서 모델 경로만 변경하면 됨
+- 모델 파일은 Docker 볼륨(`hf_models`)에 캐싱되어 재배포 시 재다운로드 불필요
+- 최초 배포 시 모델 다운로드에 5~15분 소요될 수 있음 (`/warmup`에서 처리)
+
+#### 추론 결과 저장 & 재학습 (설계서 6.4 기준)
+- **추론 결과 저장**: 분석/추천 결과를 DB에 저장하여 재학습용 데이터셋 구성에 활용 (일기 ID, 태그 예측값, 키워드, 임베딩 생성 여부, 모델 버전, 처리 성공 여부 등)
+- **모델 재학습**: 관리자가 재학습 트리거 → 최신 데이터셋으로 학습 → validation 성능 검증 → 새 버전 등록
+- **모델 버전 관리**: 새 모델은 운영 모델과 분리된 환경에서 검증 후 배포, 문제 시 이전 버전으로 롤백 가능
+- **자동 트리거 조건**: F1 Score 기준 30일 주기 자동 재학습 트리거 (관리자 API: `POST /admin/models/retrain`)
+
 ### Frontend 팀 (Flutter)
 - API 서버: `https://ember-app.duckdns.org`
 - 현재 **헬스체크 API만 동작** (`GET /api/health`)
