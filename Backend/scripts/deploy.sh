@@ -2,7 +2,7 @@
 # Backend/scripts/deploy.sh
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
