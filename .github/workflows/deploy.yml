@@ -6,8 +6,6 @@ on:
     paths:
       - 'Backend/**'
       - 'ai/**'
-      - 'nginx/**'
-      - 'scripts/**'
       - 'docker-compose.yml'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
@@ -57,8 +55,8 @@ jobs:
             chmod 600 Backend/src/main/resources/firebase-service-account.json
 
             # 4. 단계별 배포 스크립트 실행
-            chmod +x scripts/deploy.sh
-            ./scripts/deploy.sh
+            chmod +x Backend/scripts/deploy.sh
+            ./Backend/scripts/deploy.sh
 
             # 5. 이전 이미지 정리
             docker image prune -f

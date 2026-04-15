@@ -47,8 +47,8 @@ DB → Supabase Cloud (PostgreSQL)
 ### CI/CD
 - **main 브랜치에 머지하면 자동 배포** (GitHub Actions)
 - 배포 시간 약 5~10분
-- **EC2 배포 대상**: `Backend/`, `ai/`, `nginx/`, `scripts/`, `docker-compose.yml` 변경 시
-- **EC2 배포 안 됨**: `admin/`, `Frontend/`, 문서 파일 등 (Admin은 Vercel이 별도 배포)
+- **EC2 배포 대상**: `Backend/`, `ai/`, `docker-compose.yml` 변경 시 (nginx, scripts는 Backend/ 내부)
+- **EC2 배포 안 됨**: `Frontend/` (admin 포함), 문서 파일 등 (Admin은 Vercel이 별도 배포)
 
 ### 관리자 웹 (Vercel)
 - Vercel 배포 완료

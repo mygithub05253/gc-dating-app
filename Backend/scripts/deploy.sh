@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/deploy.sh
+# Backend/scripts/deploy.sh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -12,7 +12,7 @@ log() { echo "[$(date +%H:%M:%S)] $*"; }
 [ -f .env ] || { echo "❌ .env missing"; exit 1; }
 [ -f Backend/src/main/resources/firebase-service-account.json ] || \
   { echo "❌ firebase-service-account.json missing"; exit 1; }
-[ -f nginx/nginx.conf ] || { echo "❌ nginx/nginx.conf missing"; exit 1; }
+[ -f Backend/nginx/nginx.conf ] || { echo "❌ Backend/nginx/nginx.conf missing"; exit 1; }
 [ -f ai/Dockerfile ] || { echo "❌ ai/Dockerfile missing"; exit 1; }
 
 # ─────────────────────────────────────────────
