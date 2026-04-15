@@ -25,8 +25,9 @@ jobs:
             set -e
             cd ~/ember
 
-            # 1. 최신 코드
-            git pull origin main
+            # 1. 최신 코드 (로컬 변경사항 리셋 후 pull)
+            git fetch origin main
+            git reset --hard origin/main
 
             # 2. .env 재생성
             cat << EOF > .env
