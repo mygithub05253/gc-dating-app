@@ -4,9 +4,9 @@ spring:
 
   # Supabase Cloud (dev/prod 동일)
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ember}
+    username: ${DB_USERNAME:ember}
+    password: ${DB_PASSWORD:ember1234}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -32,7 +32,46 @@ app:
       - http://localhost:3000
 
 ---
-# 개발 환경
+# 로컬 개발 환경 (로컬 PostgreSQL + Swagger)
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ember
+    username: ember
+    password: ember1234
+
+  jpa:
+    hibernate:
+      ddl-auto: create
+    show-sql: true
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+app:
+  cors:
+    allowed-origins:
+      - http://localhost:3000
+      - http://localhost:8080
+      - http://10.0.2.2:8080
+
+ai:
+  service:
+    url: http://localhost:8000
+  internal-key: local-dev-key
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+---
+# 개발 환경 (Supabase Cloud)
 spring:
   config:
     activate:

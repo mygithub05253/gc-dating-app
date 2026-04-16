@@ -1,0 +1,48 @@
+# 로컬 개발용 (Backend 팀)
+# 사용법: docker compose -f docker-compose.local.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ember-local-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ember
+      POSTGRES_USER: ember
+      POSTGRES_PASSWORD: ember1234
+    volumes:
+      - local_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: ember-local-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - local_redis_data:/data
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ember-local-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - local_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  local_pg_data:
+  local_redis_data:
+  local_rabbitmq_data:

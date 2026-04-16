@@ -71,11 +71,15 @@ tasks.jar {
 }
 
 // .env 파일 로드 (bootRun 시)
+// .env.local이 있으면 우선 로드, 없으면 .env 로드
 tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
     doFirst {
+        val envLocal = file("../.env.local")
         val envFile = file("../.env")
-        if (envFile.exists()) {
-            envFile.readLines().forEach { line ->
+        val target = if (envLocal.exists()) envLocal else envFile
+
+        if (target.exists()) {
+            target.readLines().forEach { line ->
                 if (line.isNotBlank() && !line.startsWith("#")) {
                     val parts = line.split("=", limit = 2)
                     if (parts.size == 2) {

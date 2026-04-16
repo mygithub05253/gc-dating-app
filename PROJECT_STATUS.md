@@ -66,6 +66,12 @@ DB → Supabase Cloud (PostgreSQL)
 - KcELECTRA + KoSimCSE 모델 FP16 로드 구조
 - `/health`, `/warmup`, `/ready`, `/embed` 엔드포인트
 
+### 로컬 개발 환경
+- **`docker-compose.local.yml`**: 로컬 PostgreSQL + Redis + RabbitMQ
+- **local 프로파일**: 로컬 DB 연결, Swagger UI 활성화, RabbitMQ/AI 연결 설정
+- **Swagger UI**: `http://localhost:8080/swagger-ui/index.html` (local 프로파일에서만 접근 가능)
+- 사용법: `.env.local.example` → `.env.local` 복사 후 `docker compose -f docker-compose.local.yml up -d` → `./gradlew bootRun`
+
 ---
 
 ## 팀별 작업 가이드
