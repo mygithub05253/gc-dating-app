@@ -6,18 +6,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/utils/format';
+import { TERMS_TYPE_LABELS, TERMS_STATUS_LABELS } from '@/lib/constants';
 import { RefreshCw, Plus, Edit, Eye, History, FileText, Shield, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Mock 약관 데이터
+// Mock 약관 데이터 (ERD v2.0: USER_TERMS / AI_TERMS 2종 통합)
 const MOCK_TERMS = [
   {
     id: 1,
-    type: 'SERVICE',
-    title: '서비스 이용약관',
+    type: 'USER_TERMS',
+    title: '서비스 이용 약관 (서비스/개인정보/위치/마케팅 통합)',
     version: '2.1',
     status: 'ACTIVE',
-    content: '제1조 (목적)\n본 약관은 Ember 교환일기 서비스의 이용에 관한...',
+    content: '제1조 (목적)\n본 약관은 Ember 교환일기 서비스의 이용에 관한 사항을 규정한다...',
     effectiveDate: '2024-03-01T00:00:00',
     createdAt: '2024-02-25T10:00:00',
     updatedAt: '2024-02-28T15:30:00',
@@ -26,50 +27,11 @@ const MOCK_TERMS = [
   },
   {
     id: 2,
-    type: 'PRIVACY',
-    title: '개인정보 처리방침',
-    version: '3.0',
-    status: 'ACTIVE',
-    content: '1. 개인정보의 수집 및 이용 목적\n회사는 다음의 목적을 위해...',
-    effectiveDate: '2024-03-01T00:00:00',
-    createdAt: '2024-02-25T10:00:00',
-    updatedAt: '2024-02-28T15:30:00',
-    updatedBy: '김관리',
-    acceptCount: 45678,
-  },
-  {
-    id: 3,
-    type: 'LOCATION',
-    title: '위치정보 이용약관',
-    version: '1.2',
-    status: 'ACTIVE',
-    content: '제1조 (목적)\n본 약관은 위치정보의 보호 및 이용 등에 관한...',
-    effectiveDate: '2024-01-15T00:00:00',
-    createdAt: '2024-01-10T10:00:00',
-    updatedAt: '2024-01-12T14:00:00',
-    updatedBy: '이운영',
-    acceptCount: 38901,
-  },
-  {
-    id: 4,
-    type: 'MARKETING',
-    title: '마케팅 정보 수신 동의',
-    version: '1.0',
-    status: 'ACTIVE',
-    content: '1. 마케팅 정보 수신\n이벤트, 프로모션 등의 정보를...',
-    effectiveDate: '2024-01-01T00:00:00',
-    createdAt: '2023-12-20T10:00:00',
-    updatedAt: '2023-12-20T10:00:00',
-    updatedBy: '김관리',
-    acceptCount: 28456,
-  },
-  {
-    id: 5,
-    type: 'AI_ANALYSIS',
+    type: 'AI_TERMS',
     title: 'AI 분석 동의',
     version: '1.1',
     status: 'ACTIVE',
-    content: '1. AI 분석 항목\n일기 내용의 감정 분석, 키워드 추출...',
+    content: '1. AI 분석 항목\n일기 내용의 감정 분석, 키워드 추출, 매칭 추천을 위해 KcELECTRA / KoSimCSE 모델을 사용합니다...',
     effectiveDate: '2024-02-01T00:00:00',
     createdAt: '2024-01-28T10:00:00',
     updatedAt: '2024-01-30T11:00:00',
@@ -77,54 +39,50 @@ const MOCK_TERMS = [
     acceptCount: 41234,
   },
   {
-    id: 6,
-    type: 'SERVICE',
-    title: '서비스 이용약관 (구버전)',
+    id: 3,
+    type: 'USER_TERMS',
+    title: '서비스 이용 약관 (구버전)',
     version: '2.0',
     status: 'ARCHIVED',
-    content: '제1조 (목적)\n본 약관은...',
+    content: '제1조 (목적)\n본 약관은 v2.1로 대체되었습니다.',
     effectiveDate: '2024-01-01T00:00:00',
     createdAt: '2023-12-20T10:00:00',
     updatedAt: '2024-02-28T15:30:00',
     updatedBy: '김관리',
     acceptCount: 12345,
   },
+  {
+    id: 4,
+    type: 'AI_TERMS',
+    title: 'AI 분석 동의 (구버전)',
+    version: '1.0',
+    status: 'ARCHIVED',
+    content: '제1조: v1.1로 대체되었습니다.',
+    effectiveDate: '2024-01-01T00:00:00',
+    createdAt: '2023-12-20T10:00:00',
+    updatedAt: '2024-01-30T10:00:00',
+    updatedBy: '이운영',
+    acceptCount: 8765,
+  },
 ];
 
 // Mock 약관 버전 이력
 const MOCK_TERM_HISTORY = [
   { version: '2.1', date: '2024-03-01', change: '교환일기 관련 조항 추가' },
-  { version: '2.0', date: '2024-01-01', change: '매칭 서비스 관련 조항 신설' },
+  { version: '2.0', date: '2024-01-01', change: '5종(서비스/개인정보/위치/마케팅/AI)을 2종(USER_TERMS/AI_TERMS)으로 통합' },
   { version: '1.5', date: '2023-10-01', change: '개인정보 처리 관련 조항 수정' },
   { version: '1.0', date: '2023-07-01', change: '최초 등록' },
 ];
 
-const TYPE_LABELS: Record<string, string> = {
-  SERVICE: '서비스 이용약관',
-  PRIVACY: '개인정보 처리방침',
-  LOCATION: '위치정보 이용약관',
-  MARKETING: '마케팅 수신 동의',
-  AI_ANALYSIS: 'AI 분석 동의',
-};
-
 const TYPE_COLORS: Record<string, string> = {
-  SERVICE: 'bg-blue-100 text-blue-800',
-  PRIVACY: 'bg-purple-100 text-purple-800',
-  LOCATION: 'bg-green-100 text-green-800',
-  MARKETING: 'bg-yellow-100 text-yellow-800',
-  AI_ANALYSIS: 'bg-pink-100 text-pink-800',
+  USER_TERMS: 'bg-blue-100 text-blue-800',
+  AI_TERMS: 'bg-pink-100 text-pink-800',
 };
 
 const STATUS_COLORS: Record<string, string> = {
   ACTIVE: 'bg-green-100 text-green-800',
   DRAFT: 'bg-gray-100 text-gray-800',
   ARCHIVED: 'bg-orange-100 text-orange-800',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  ACTIVE: '적용중',
-  DRAFT: '초안',
-  ARCHIVED: '보관됨',
 };
 
 export default function TermsManagementPage() {
@@ -153,7 +111,7 @@ export default function TermsManagementPage() {
     <div>
       <PageHeader
         title="약관 관리"
-        description="서비스 이용약관 및 개인정보 처리방침 관리"
+        description="서비스 이용 약관(USER_TERMS) 및 AI 분석 동의(AI_TERMS) 관리"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleRefresh}>
@@ -222,10 +180,10 @@ export default function TermsManagementPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-semibold">{term.title}</h3>
                     <Badge className={TYPE_COLORS[term.type]}>
-                      {TYPE_LABELS[term.type]}
+                      {TERMS_TYPE_LABELS[term.type]}
                     </Badge>
                     <Badge className={STATUS_COLORS[term.status]}>
-                      {STATUS_LABELS[term.status]}
+                      {TERMS_STATUS_LABELS[term.status]}
                     </Badge>
                     <Badge variant="outline">v{term.version}</Badge>
                   </div>

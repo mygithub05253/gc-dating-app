@@ -19,7 +19,7 @@ export const noticesApi = {
   update: (id: number, data: Partial<NoticeCreateRequest>) =>
     apiClient.put<ApiResponse<Notice>>(`/api/admin/notices/${id}`, data),
 
-  // 공지사항 상태 변경 (PUBLISHED/ARCHIVED)
+  // 공지사항 상태 변경 (DRAFT/PUBLISHED/HIDDEN — ERD v2.0 기준)
   changeStatus: (id: number, status: NoticeStatus) =>
     apiClient.patch<ApiResponse<null>>(`/api/admin/notices/${id}/status`, { status }),
 };

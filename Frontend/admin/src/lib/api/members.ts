@@ -1,12 +1,12 @@
 import apiClient from './client';
-import type { ApiResponse, CursorResponse } from './types';
+import type { ApiResponse, PageResponse } from './types';
 import type { AdminUserDetail, MemberSearchParams } from '@/types/user';
 
-// 기능명세서 기준: /api/admin/members (커서 기반 페이지네이션)
+// 기능명세서 + API 통합명세서 v2.0 기준: /api/admin/members
 export const membersApi = {
-  // 7.1 회원 목록 조회 (커서 기반)
+  // 7.1 회원 목록 조회 (PageResponse — 명세서 기준 오프셋 페이지네이션)
   getList: (params: MemberSearchParams) =>
-    apiClient.get<ApiResponse<CursorResponse<AdminUserDetail>>>('/api/admin/members', { params }),
+    apiClient.get<ApiResponse<PageResponse<AdminUserDetail>>>('/api/admin/members', { params }),
 
   // 7.2 회원 상세 조회
   getDetail: (userId: number) =>
@@ -24,11 +24,23 @@ export const membersApi = {
   getSanctionHistory: (userId: number) =>
     apiClient.get<ApiResponse<unknown>>(`/api/admin/members/${userId}/sanction-history`),
 
-  // 7.3 회원 제재 (memo 최소 10자)
-  sanction: (userId: number, data: { type: '7DAY' | 'PERMANENT' | 'IMMEDIATE_PERMANENT'; memo: string }) =>
-    apiClient.post<ApiResponse<null>>(`/api/admin/members/${userId}/sanction`, data),
+  // 7.2 회원이 작성한 일기 목록 (ADMIN+ only)
+  getDiaries: (userId: number, params?: { cursor?: string; limit?: number }) =>
+    apiClient.get<ApiResponse<unknown>>(`/api/admin/members/${userId}/diaries`, { params }),
 
-  // 7.3 회원 제재 해제 (SUPER_ADMIN only)
-  liftSanction: (userId: number, reason: string) =>
-    apiClient.delete<ApiResponse<null>>(`/api/admin/members/${userId}/sanction`, { data: { reason } }),
+  // 7.3 7일 정지 (memo 최소 10자, ADMIN+)
+  suspend: (userId: number, data: { memo: string }) =>
+    apiClient.post<ApiResponse<null>>(`/api/admin/members/${userId}/suspend`, { type: '7DAY', ...data }),
+
+  // 7.3 영구 정지 (memo 최소 10자, ADMIN+)
+  ban: (userId: number, data: { memo: string }) =>
+    apiClient.post<ApiResponse<null>>(`/api/admin/members/${userId}/ban`, { type: 'PERMANENT', ...data }),
+
+  // 7.3 즉시 영구 정지 (SUPER_ADMIN only)
+  immediateBan: (userId: number, data: { memo: string }) =>
+    apiClient.post<ApiResponse<null>>(`/api/admin/members/${userId}/ban`, { type: 'IMMEDIATE_PERMANENT', ...data }),
+
+  // 7.7 회원 제재 해제 (SUPER_ADMIN only)
+  releaseSanction: (userId: number, reason: string) =>
+    apiClient.post<ApiResponse<null>>(`/api/admin/users/${userId}/suspension/release`, { reason }),
 };

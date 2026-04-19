@@ -12,13 +12,13 @@ import { REPORT_REASON_LABELS, REPORT_STATUS_LABELS, REPORT_STATUS_COLORS } from
 import { RefreshCw, Download, Eye, AlertTriangle, Clock, ShieldAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// 기능명세서 9.1 심각도 가중치
+// 기능명세서 9.1 심각도 가중치 (ERD v2.0 ReportReason 기준)
 const SEVERITY_WEIGHTS: Record<string, number> = {
-  OBSCENE: 5,
+  SEXUAL: 5,
   PERSONAL_INFO: 4,
   HARASSMENT: 3,
   PROFANITY: 2,
-  FAKE_PROFILE: 2,
+  IMPERSONATION: 2,
   SPAM: 2,
   OTHER: 1,
 };
@@ -42,8 +42,8 @@ const MOCK_REPORTS = [
     id: 2,
     reporterNickname: '햇살가득',
     targetNickname: '바람처럼',
-    reason: 'OBSCENE' as const,
-    status: 'UNDER_REVIEW' as const,
+    reason: 'SEXUAL' as const,
+    status: 'IN_REVIEW' as const,
     accumulatedReportCount: 2,
     slaDeadline: '2024-03-24T15:00:00',
     slaProgress: 0.88,
@@ -82,7 +82,7 @@ const MOCK_REPORTS = [
     reporterNickname: '행복한날',
     targetNickname: '자유로운영혼',
     reason: 'PERSONAL_INFO' as const,
-    status: 'UNDER_REVIEW' as const,
+    status: 'IN_REVIEW' as const,
     accumulatedReportCount: 1,
     slaDeadline: '2024-03-24T10:00:00',
     slaProgress: 1.15,
@@ -143,7 +143,7 @@ export default function ReportsPage() {
   }, [keyword, statusFilter, reasonFilter]);
 
   // 기능명세서 9.1 요약 카드
-  const unresolvedCount = MOCK_REPORTS.filter((r) => r.status === 'PENDING' || r.status === 'UNDER_REVIEW').length;
+  const unresolvedCount = MOCK_REPORTS.filter((r) => r.status === 'PENDING' || r.status === 'IN_REVIEW').length;
   const slaApproachingCount = MOCK_REPORTS.filter((r) => r.slaProgress >= 0.8 && r.slaProgress < 1.0 && r.status !== 'RESOLVED' && r.status !== 'DISMISSED').length;
   const slaExceededCount = MOCK_REPORTS.filter((r) => r.slaProgress >= 1.0 && r.status !== 'RESOLVED' && r.status !== 'DISMISSED').length;
 

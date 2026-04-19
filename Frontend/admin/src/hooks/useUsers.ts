@@ -18,6 +18,7 @@ export function useMemberDetail(id: number) {
   });
 }
 
+// 7.3 회원 제재 (suspend / ban / immediateBan 분리 — API 통합명세서 v2.0 §3)
 export function useSanctionMember() {
   const queryClient = useQueryClient();
 
@@ -30,7 +31,11 @@ export function useSanctionMember() {
       id: number;
       type: '7DAY' | 'PERMANENT' | 'IMMEDIATE_PERMANENT';
       memo: string;
-    }) => membersApi.sanction(id, { type, memo }),
+    }) => {
+      if (type === '7DAY') return membersApi.suspend(id, { memo });
+      if (type === 'IMMEDIATE_PERMANENT') return membersApi.immediateBan(id, { memo });
+      return membersApi.ban(id, { memo });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['members'] });
       toast.success('회원이 제재되었습니다.');
@@ -38,12 +43,13 @@ export function useSanctionMember() {
   });
 }
 
-export function useLiftSanction() {
+// 7.7 회원 제재 해제 (SUPER_ADMIN only)
+export function useReleaseSanction() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) =>
-      membersApi.liftSanction(id, reason),
+      membersApi.releaseSanction(id, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['members'] });
       toast.success('회원 제재가 해제되었습니다.');

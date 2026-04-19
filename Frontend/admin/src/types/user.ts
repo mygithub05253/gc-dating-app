@@ -1,6 +1,16 @@
-export type UserStatus = 'ACTIVE' | 'SUSPEND_7D' | 'BANNED' | 'WITHDRAWN';
+// 회원 상태 (ERD v2.0 기준 6종)
+export type UserStatus =
+  | 'ACTIVE'
+  | 'GUEST'
+  | 'SUSPEND_7D'
+  | 'SUSPEND_30D'
+  | 'BANNED'
+  | 'DEACTIVATED';
+
 export type UserRole = 'ROLE_USER' | 'ROLE_GUEST';
-export type Gender = 'M' | 'F';
+
+// 성별 (ERD v2.0 기준)
+export type Gender = 'MALE' | 'FEMALE';
 
 // 의심 계정 관련
 export type SuspicionType = 'BOT' | 'FAKE_PROFILE' | 'SPAM' | 'MULTI_ACCOUNT' | 'SCAM';

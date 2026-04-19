@@ -7,16 +7,33 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/utils/format';
-import { RefreshCw, Plus, Edit, Trash2, Eye, Pin, Bell, Megaphone, AlertTriangle, Info, CheckCircle } from 'lucide-react';
+import {
+  NOTICE_CATEGORY_LABELS,
+  NOTICE_CATEGORY_COLORS,
+  NOTICE_STATUS_LABELS,
+  NOTICE_STATUS_COLORS,
+} from '@/lib/constants';
+import {
+  RefreshCw,
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  Pin,
+  Bell,
+  Megaphone,
+  AlertTriangle,
+  Info,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Mock 공지사항 데이터
+// Mock 공지사항 데이터 (ERD v2.0: GENERAL/MAINTENANCE/TERMS_CHANGE/URGENT, DRAFT/PUBLISHED/HIDDEN)
 const MOCK_NOTICES = [
   {
     id: 1,
     title: '서비스 이용약관 변경 안내',
     content: '안녕하세요, Ember입니다.\n\n2024년 3월 1일부터 서비스 이용약관이 변경됩니다. 주요 변경사항은 다음과 같습니다...',
-    category: 'TERMS',
+    category: 'TERMS_CHANGE',
     priority: 'HIGH',
     isPinned: true,
     status: 'PUBLISHED',
@@ -30,7 +47,7 @@ const MOCK_NOTICES = [
     id: 2,
     title: '수요일 특별 랜덤 주제 이벤트',
     content: '매주 수요일에 특별한 랜덤 주제가 제공됩니다! 이번 주 주제는...',
-    category: 'EVENT',
+    category: 'GENERAL',
     priority: 'NORMAL',
     isPinned: true,
     status: 'PUBLISHED',
@@ -58,7 +75,7 @@ const MOCK_NOTICES = [
     id: 4,
     title: '새로운 감정 코칭 기능 출시',
     content: 'AI 기반 감정 코칭 기능이 새롭게 출시되었습니다. 일기를 작성하시면...',
-    category: 'UPDATE',
+    category: 'GENERAL',
     priority: 'NORMAL',
     isPinned: false,
     status: 'PUBLISHED',
@@ -72,7 +89,7 @@ const MOCK_NOTICES = [
     id: 5,
     title: '봄맞이 이벤트 - 커플 탄생 축하',
     content: '봄을 맞아 Ember에서 특별한 이벤트를 준비했습니다!',
-    category: 'EVENT',
+    category: 'GENERAL',
     priority: 'NORMAL',
     isPinned: false,
     status: 'DRAFT',
@@ -86,54 +103,51 @@ const MOCK_NOTICES = [
     id: 6,
     title: '개인정보 처리방침 변경 사전 안내',
     content: '2024년 4월 1일부터 개인정보 처리방침이 변경될 예정입니다.',
-    category: 'TERMS',
+    category: 'TERMS_CHANGE',
     priority: 'HIGH',
     isPinned: false,
-    status: 'SCHEDULED',
+    status: 'DRAFT',
     publishedAt: '2024-03-25T09:00:00',
     createdAt: '2024-03-23T10:00:00',
     createdBy: '김관리',
     viewCount: 0,
     targetAudience: 'ALL',
   },
+  {
+    id: 7,
+    title: '[긴급] 임시 점검 안내',
+    content: 'AI 모델 업데이트로 인해 23:00~23:30 일시 서비스가 중단될 수 있습니다.',
+    category: 'URGENT',
+    priority: 'HIGH',
+    isPinned: true,
+    status: 'PUBLISHED',
+    publishedAt: '2024-03-23T22:30:00',
+    createdAt: '2024-03-23T22:00:00',
+    createdBy: '김관리',
+    viewCount: 9876,
+    targetAudience: 'ALL',
+  },
+  {
+    id: 8,
+    title: '공지 (숨김 처리)',
+    content: '잘못 게시되어 숨김 처리된 공지입니다.',
+    category: 'GENERAL',
+    priority: 'NORMAL',
+    isPinned: false,
+    status: 'HIDDEN',
+    publishedAt: '2024-03-15T10:00:00',
+    createdAt: '2024-03-15T09:30:00',
+    createdBy: '박신입',
+    viewCount: 234,
+    targetAudience: 'ALL',
+  },
 ];
 
-const CATEGORY_LABELS: Record<string, string> = {
-  TERMS: '약관',
-  EVENT: '이벤트',
-  MAINTENANCE: '점검',
-  UPDATE: '업데이트',
-  GENERAL: '일반',
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-  TERMS: 'bg-purple-100 text-purple-800',
-  EVENT: 'bg-pink-100 text-pink-800',
-  MAINTENANCE: 'bg-orange-100 text-orange-800',
-  UPDATE: 'bg-blue-100 text-blue-800',
-  GENERAL: 'bg-gray-100 text-gray-800',
-};
-
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  TERMS: <AlertTriangle className="h-4 w-4" />,
-  EVENT: <Megaphone className="h-4 w-4" />,
-  MAINTENANCE: <Bell className="h-4 w-4" />,
-  UPDATE: <CheckCircle className="h-4 w-4" />,
   GENERAL: <Info className="h-4 w-4" />,
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  PUBLISHED: '게시중',
-  DRAFT: '초안',
-  SCHEDULED: '예약됨',
-  ARCHIVED: '보관됨',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  PUBLISHED: 'bg-green-100 text-green-800',
-  DRAFT: 'bg-gray-100 text-gray-800',
-  SCHEDULED: 'bg-blue-100 text-blue-800',
-  ARCHIVED: 'bg-orange-100 text-orange-800',
+  MAINTENANCE: <Bell className="h-4 w-4" />,
+  TERMS_CHANGE: <AlertTriangle className="h-4 w-4" />,
+  URGENT: <Megaphone className="h-4 w-4" />,
 };
 
 export default function NoticesManagementPage() {
@@ -208,17 +222,17 @@ export default function NoticesManagementPage() {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">예약됨</div>
-            <div className="mt-1 text-2xl font-bold text-blue-600">
-              {MOCK_NOTICES.filter(n => n.status === 'SCHEDULED').length}
+            <div className="text-sm text-muted-foreground">초안</div>
+            <div className="mt-1 text-2xl font-bold text-gray-500">
+              {MOCK_NOTICES.filter(n => n.status === 'DRAFT').length}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-sm text-muted-foreground">초안</div>
-            <div className="mt-1 text-2xl font-bold text-gray-500">
-              {MOCK_NOTICES.filter(n => n.status === 'DRAFT').length}
+            <div className="text-sm text-muted-foreground">숨김</div>
+            <div className="mt-1 text-2xl font-bold text-zinc-500">
+              {MOCK_NOTICES.filter(n => n.status === 'HIDDEN').length}
             </div>
           </CardContent>
         </Card>
@@ -240,7 +254,7 @@ export default function NoticesManagementPage() {
             className="rounded-md border px-3 py-2 text-sm"
           >
             <option value="ALL">전체 카테고리</option>
-            {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+            {Object.entries(NOTICE_CATEGORY_LABELS).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
             ))}
           </select>
@@ -250,7 +264,7 @@ export default function NoticesManagementPage() {
             className="rounded-md border px-3 py-2 text-sm"
           >
             <option value="ALL">전체 상태</option>
-            {Object.entries(STATUS_LABELS).map(([key, label]) => (
+            {Object.entries(NOTICE_STATUS_LABELS).map(([key, label]) => (
               <option key={key} value={key}>{label}</option>
             ))}
           </select>
@@ -271,14 +285,14 @@ export default function NoticesManagementPage() {
                     {notice.priority === 'HIGH' && (
                       <Badge className="bg-red-100 text-red-800">중요</Badge>
                     )}
-                    <Badge className={CATEGORY_COLORS[notice.category]}>
+                    <Badge className={NOTICE_CATEGORY_COLORS[notice.category]}>
                       <span className="flex items-center gap-1">
                         {CATEGORY_ICONS[notice.category]}
-                        {CATEGORY_LABELS[notice.category]}
+                        {NOTICE_CATEGORY_LABELS[notice.category]}
                       </span>
                     </Badge>
-                    <Badge className={STATUS_COLORS[notice.status]}>
-                      {STATUS_LABELS[notice.status]}
+                    <Badge className={NOTICE_STATUS_COLORS[notice.status]}>
+                      {NOTICE_STATUS_LABELS[notice.status]}
                     </Badge>
                   </div>
                   <h3 className="mt-2 font-semibold">{notice.title}</h3>
@@ -313,10 +327,8 @@ export default function NoticesManagementPage() {
                   <span>조회: {notice.viewCount.toLocaleString()}</span>
                 </div>
                 <span>
-                  {notice.status === 'PUBLISHED'
-                    ? `게시일: ${formatDateTime(notice.publishedAt!)}`
-                    : notice.status === 'SCHEDULED'
-                    ? `예약: ${formatDateTime(notice.publishedAt!)}`
+                  {notice.status === 'PUBLISHED' && notice.publishedAt
+                    ? `게시일: ${formatDateTime(notice.publishedAt)}`
                     : `작성일: ${formatDateTime(notice.createdAt)}`
                   }
                 </span>

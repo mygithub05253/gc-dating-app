@@ -24,9 +24,9 @@ export interface TopicSchedule {
   isOverridden: boolean;
 }
 
-// ─── 공지사항(Notice) ───
-export type NoticeCategory = 'TERMS' | 'EVENT' | 'MAINTENANCE' | 'UPDATE' | 'GENERAL';
-export type NoticeStatus = 'PUBLISHED' | 'DRAFT' | 'SCHEDULED' | 'ARCHIVED';
+// ─── 공지사항(Notice) ── ERD v2.0 기준
+export type NoticeCategory = 'GENERAL' | 'MAINTENANCE' | 'TERMS_CHANGE' | 'URGENT';
+export type NoticeStatus = 'DRAFT' | 'PUBLISHED' | 'HIDDEN';
 export type NoticePriority = 'HIGH' | 'NORMAL';
 
 export interface Notice {
@@ -62,8 +62,8 @@ export interface NoticeSearchParams {
   size?: number;
 }
 
-// ─── 약관(Terms) ───
-export type TermsType = 'SERVICE' | 'PRIVACY' | 'LOCATION' | 'MARKETING' | 'AI_ANALYSIS';
+// ─── 약관(Terms) ── ERD v2.0 기준 2종 통합
+export type TermsType = 'USER_TERMS' | 'AI_TERMS';
 export type TermsStatus = 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
 
 export interface Terms {
@@ -100,26 +100,33 @@ export interface TermsVersionHistory {
   change: string;
 }
 
-// ─── 예제 일기(Example Diary) ───
+// ─── 예제 일기(Example Diary) ──
+export type ExampleDiaryCategory = 'DAILY' | 'EMOTION' | 'GROWTH' | 'RELATIONSHIP';
+export type ExampleDiaryTarget = 'ONBOARDING' | 'HELP' | 'FAQ';
+
 export interface ExampleDiary {
   id: number;
   title: string;
   content: string;
-  category: TopicCategory;
-  emotion: string;
+  category: ExampleDiaryCategory;
+  displayTarget: ExampleDiaryTarget;
+  displayOrder: number;
   isActive: boolean;
+  createdBy: number;
   createdAt: string;
 }
 
-// ─── 교환일기 가이드 ───
+// ─── 교환일기 가이드 단계 ── ERD v2.0 기준 (필드명 정합화)
 export interface ExchangeDiaryGuideStep {
-  step: number;
-  title: string;
+  id: number;
+  stepOrder: number;
+  stepTitle: string;
   description: string;
   imageUrl?: string;
+  isActive: boolean;
 }
 
-// ─── 배너(Banner) ───
+// ─── 배너(Banner) ──
 export interface Banner {
   id: number;
   title: string;
@@ -129,5 +136,18 @@ export interface Banner {
   displayOrder: number;
   startDate: string;
   endDate: string;
+  createdAt: string;
+}
+
+// ─── 금칙어(Banned Word) ── ERD v2.0 신설
+export type BannedWordCategory = 'PROFANITY' | 'SEXUAL' | 'DISCRIMINATION' | 'ETC';
+
+export interface BannedWord {
+  id: number;
+  word: string;
+  category: BannedWordCategory;
+  isActive: boolean;
+  hitCount: number;
+  createdBy: number;
   createdAt: string;
 }

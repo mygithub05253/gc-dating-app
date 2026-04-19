@@ -1,6 +1,6 @@
 import apiClient from './client';
 import type { ApiResponse } from './types';
-import type { TokenResponse } from '@/types/common';
+import type { TokenResponse, AdminProfile } from '@/types/common';
 
 interface LoginRequest {
   email: string;
@@ -18,4 +18,7 @@ export const authApi = {
 
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     apiClient.put<ApiResponse<null>>('/api/admin/auth/password', data),
+
+  // 현재 관리자 정보 조회 (API 통합명세서 v2.0 §1)
+  getMe: () => apiClient.get<ApiResponse<AdminProfile>>('/api/admin/auth/me'),
 };

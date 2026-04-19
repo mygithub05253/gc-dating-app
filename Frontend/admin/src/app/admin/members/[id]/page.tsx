@@ -42,7 +42,7 @@ const MOCK_USERS: Record<string, any> = {
   '1': {
     id: 1,
     nickname: '별빛소녀',
-    gender: 'F',
+    gender: 'FEMALE',
     age: 27,
     status: 'ACTIVE',
     createdAt: '2024-01-15T10:30:00',
@@ -66,9 +66,9 @@ const MOCK_USERS: Record<string, any> = {
   '2': {
     id: 2,
     nickname: '달빛청년',
-    gender: 'M',
+    gender: 'MALE',
     age: 28,
-    status: 'WITHDRAWN',
+    status: 'DEACTIVATED',
     withdrawnAt: '2024-03-25T00:00:00',
     createdAt: '2024-02-01T14:00:00',
     lastActivityAt: '2024-03-18T22:30:00',
@@ -102,7 +102,7 @@ const MOCK_USERS: Record<string, any> = {
   },
 };
 
-// WITHDRAWN 상태에서 D-day 계산
+// DEACTIVATED(탈퇴 예정) 상태에서 D-day 계산
 function getWithdrawnDDay(withdrawnAt: string): string {
   const target = new Date(withdrawnAt);
   const now = new Date();
@@ -251,7 +251,7 @@ export default function UserDetailPage() {
                   <Badge className={USER_STATUS_COLORS[user.status]}>
                     {USER_STATUS_LABELS[user.status]}
                   </Badge>
-                  {user.status === 'WITHDRAWN' && user.withdrawnAt && (
+                  {user.status === 'DEACTIVATED' && user.withdrawnAt && (
                     <Badge variant="outline" className="ml-1 text-orange-600 border-orange-300">
                       {getWithdrawnDDay(user.withdrawnAt)}
                     </Badge>

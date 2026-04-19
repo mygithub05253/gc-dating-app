@@ -13,3 +13,14 @@ export interface TokenResponse {
   adminId: number;
   email: string;
 }
+
+// 현재 로그인한 관리자 프로필 (GET /api/admin/auth/me 응답)
+export interface AdminProfile {
+  adminId: number;
+  email: string;
+  name: string;
+  role: AdminRole;
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'DELETED';
+  lastLoginAt: string | null;
+  createdAt: string;
+}

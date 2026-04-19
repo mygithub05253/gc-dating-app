@@ -17,7 +17,7 @@ const MOCK_USERS = [
     id: 1,
     nickname: '별빛소녀',
     realName: '김민지',
-    gender: 'F' as const,
+    gender: 'FEMALE' as const,
     region: '서울',
     status: 'ACTIVE' as const,
     diaryCount: 15,
@@ -28,7 +28,7 @@ const MOCK_USERS = [
     id: 2,
     nickname: '달빛청년',
     realName: '이준호',
-    gender: 'M' as const,
+    gender: 'MALE' as const,
     region: '부산',
     status: 'SUSPEND_7D' as const,
     diaryCount: 8,
@@ -39,7 +39,7 @@ const MOCK_USERS = [
     id: 3,
     nickname: '햇살가득',
     realName: '박서연',
-    gender: 'F' as const,
+    gender: 'FEMALE' as const,
     region: '인천',
     status: 'ACTIVE' as const,
     diaryCount: 22,
@@ -50,7 +50,7 @@ const MOCK_USERS = [
     id: 4,
     nickname: '밤하늘별',
     realName: '최민수',
-    gender: 'M' as const,
+    gender: 'MALE' as const,
     region: '대전',
     status: 'ACTIVE' as const,
     diaryCount: 10,
@@ -61,7 +61,7 @@ const MOCK_USERS = [
     id: 5,
     nickname: '꽃구름',
     realName: '정유진',
-    gender: 'F' as const,
+    gender: 'FEMALE' as const,
     region: '광주',
     status: 'BANNED' as const,
     diaryCount: 3,
@@ -72,7 +72,7 @@ const MOCK_USERS = [
     id: 6,
     nickname: '바람처럼',
     realName: '김태현',
-    gender: 'M' as const,
+    gender: 'MALE' as const,
     region: '서울',
     status: 'ACTIVE' as const,
     diaryCount: 18,
@@ -83,7 +83,7 @@ const MOCK_USERS = [
     id: 7,
     nickname: '달콤한하루',
     realName: '이수민',
-    gender: 'F' as const,
+    gender: 'FEMALE' as const,
     region: '경기',
     status: 'ACTIVE' as const,
     diaryCount: 25,
@@ -94,7 +94,7 @@ const MOCK_USERS = [
     id: 8,
     nickname: '푸른바다',
     realName: '박준영',
-    gender: 'M' as const,
+    gender: 'MALE' as const,
     region: '부산',
     status: 'SUSPEND_7D' as const,
     diaryCount: 5,
@@ -161,7 +161,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3 text-sm font-medium">{user.nickname}</td>
                     <td className="px-4 py-3 text-sm">{user.realName}</td>
                     <td className="px-4 py-3 text-sm">
-                      {user.gender === 'M' ? '남성' : '여성'}
+                      {user.gender === 'MALE' ? '남성' : '여성'}
                     </td>
                     <td className="px-4 py-3 text-sm">{user.region}</td>
                     <td className="px-4 py-3">

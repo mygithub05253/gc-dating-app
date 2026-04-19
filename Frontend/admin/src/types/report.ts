@@ -1,14 +1,24 @@
-export type ReportReason = 'PROFANITY' | 'OBSCENE' | 'PERSONAL_INFO' | 'HARASSMENT' | 'FAKE_PROFILE' | 'SPAM' | 'OTHER';
-export type ReportStatus = 'PENDING' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
+// 신고 사유 (ERD v2.0 기준 7종)
+export type ReportReason =
+  | 'PROFANITY'
+  | 'SEXUAL'
+  | 'PERSONAL_INFO'
+  | 'SPAM'
+  | 'IMPERSONATION'
+  | 'HARASSMENT'
+  | 'OTHER';
+
+// 신고 상태 (ERD v2.0 기준)
+export type ReportStatus = 'PENDING' | 'IN_REVIEW' | 'RESOLVED' | 'DISMISSED';
 
 // 기능명세서 기준 심각도 가중치
 export const REPORT_SEVERITY_WEIGHTS: Record<string, number> = {
-  OBSCENE: 5,        // 성적 콘텐츠
+  SEXUAL: 5,         // 성적 콘텐츠
   PERSONAL_INFO: 4,  // 개인정보 노출
   HARASSMENT: 3,     // 괴롭힘
   SPAM: 2,           // 스팸
   PROFANITY: 2,      // 욕설
-  FAKE_PROFILE: 2,   // 허위 프로필
+  IMPERSONATION: 2,  // 사칭/허위 프로필
   OTHER: 1,          // 기타
 };
 
