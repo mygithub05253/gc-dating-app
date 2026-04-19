@@ -152,6 +152,86 @@ export const BANNED_WORD_CATEGORY_COLORS: Record<string, string> = {
 };
 
 // ────────────────────────────────────────────────────────
+// 고객 문의 (관리자 API 통합명세서 v2.0 §17.1)
+// ────────────────────────────────────────────────────────
+export const INQUIRY_CATEGORY_LABELS: Record<string, string> = {
+  ACCOUNT: '계정',
+  MATCHING: '매칭',
+  EXCHANGE: '교환일기',
+  CHAT: '채팅',
+  PAYMENT: '결제',
+  BUG: '버그',
+  OTHER: '기타',
+};
+
+export const INQUIRY_CATEGORY_COLORS: Record<string, string> = {
+  ACCOUNT: 'bg-blue-100 text-blue-800',
+  MATCHING: 'bg-pink-100 text-pink-800',
+  EXCHANGE: 'bg-purple-100 text-purple-800',
+  CHAT: 'bg-cyan-100 text-cyan-800',
+  PAYMENT: 'bg-green-100 text-green-800',
+  BUG: 'bg-red-100 text-red-800',
+  OTHER: 'bg-gray-100 text-gray-800',
+};
+
+export const INQUIRY_STATUS_LABELS: Record<string, string> = {
+  OPEN: '대기 중',
+  IN_PROGRESS: '처리 중',
+  RESOLVED: '답변 완료',
+  CLOSED: '종료',
+};
+
+export const INQUIRY_STATUS_COLORS: Record<string, string> = {
+  OPEN: 'bg-yellow-100 text-yellow-800',
+  IN_PROGRESS: 'bg-blue-100 text-blue-800',
+  RESOLVED: 'bg-green-100 text-green-800',
+  CLOSED: 'bg-gray-100 text-gray-700',
+};
+
+// ────────────────────────────────────────────────────────
+// 이의신청 (관리자 API 통합명세서 v2.0 §17.2)
+// ────────────────────────────────────────────────────────
+export const APPEAL_STATUS_LABELS: Record<string, string> = {
+  PENDING: '대기 중',
+  IN_PROGRESS: '검토 중',
+  ACCEPTED: '수락',
+  REJECTED: '기각',
+};
+
+export const APPEAL_STATUS_COLORS: Record<string, string> = {
+  PENDING: 'bg-red-100 text-red-700',
+  IN_PROGRESS: 'bg-yellow-100 text-yellow-800',
+  ACCEPTED: 'bg-green-100 text-green-700',
+  REJECTED: 'bg-gray-100 text-gray-700',
+};
+
+export const SANCTION_TYPE_LABELS: Record<string, string> = {
+  WARNING: '경고',
+  SUSPEND_7D: '7일 정지',
+  SUSPEND_30D: '30일 정지',
+  BANNED: '영구 정지',
+};
+
+// ────────────────────────────────────────────────────────
+// FAQ (관리자 API 통합명세서 v2.0 §22)
+// ────────────────────────────────────────────────────────
+export const FAQ_CATEGORY_LABELS: Record<string, string> = {
+  ACCOUNT: '계정',
+  MATCHING: '매칭',
+  DIARY: '일기',
+  PAYMENT: '결제',
+  ETC: '기타',
+};
+
+export const FAQ_CATEGORY_COLORS: Record<string, string> = {
+  ACCOUNT: 'bg-blue-100 text-blue-700',
+  MATCHING: 'bg-pink-100 text-pink-700',
+  DIARY: 'bg-purple-100 text-purple-700',
+  PAYMENT: 'bg-green-100 text-green-700',
+  ETC: 'bg-gray-100 text-gray-700',
+};
+
+// ────────────────────────────────────────────────────────
 // 페이지네이션
 // ────────────────────────────────────────────────────────
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
