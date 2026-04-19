@@ -82,6 +82,9 @@ const navItems: NavItem[] = [
       { title: '큐레이션 관리', href: '/admin/content/curations' },
       { title: '약관 관리', href: '/admin/content/terms' },
       { title: '공지사항 관리', href: '/admin/content/notices' },
+      { title: '금칙어 관리', href: '/admin/content/banned-words' },
+      { title: '튜토리얼 관리', href: '/admin/content/tutorials' },
+      { title: '예제 일기 관리', href: '/admin/content/example-diaries' },
     ],
   },
   {

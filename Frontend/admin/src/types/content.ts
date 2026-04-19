@@ -151,3 +151,24 @@ export interface BannedWord {
   createdBy: number;
   createdAt: string;
 }
+
+// ─── 튜토리얼(Tutorial) ──
+export type TutorialType = 'ONBOARDING' | 'EXCHANGE_DIARY' | 'MATCHING' | 'PROFILE';
+
+export interface TutorialStep {
+  stepOrder: number;
+  title: string;
+  description: string;
+  imageUrl: string;
+}
+
+export interface Tutorial {
+  id: number;
+  type: TutorialType;
+  title: string;
+  description: string;
+  isActive: boolean;
+  steps: TutorialStep[];
+  version: string;
+  updatedAt: string;
+}
