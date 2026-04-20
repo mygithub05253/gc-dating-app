@@ -11,6 +11,18 @@ export type ReportReason =
 // 신고 상태 (ERD v2.0 기준)
 export type ReportStatus = 'PENDING' | 'IN_REVIEW' | 'RESOLVED' | 'DISMISSED';
 
+// SLA 상태 (API v2.1 신규, 서버 계산 라벨)
+export type SlaStatus = 'ON_TRACK' | 'WARNING' | 'OVERDUE';
+
+// 제재 유형 (ERD v2.1 sanction_history.sanction_type 정합, 사용자 명세서 11.4 5종)
+export type SanctionType =
+  | 'WARNING'
+  | 'SUSPEND_7D'
+  | 'SUSPEND_30D'
+  | 'SUSPEND_PERMANENT'
+  | 'FORCE_WITHDRAW'
+  | 'UNBLOCK';
+
 // 기능명세서 기준 심각도 가중치
 export const REPORT_SEVERITY_WEIGHTS: Record<string, number> = {
   SEXUAL: 5,         // 성적 콘텐츠
@@ -48,18 +60,20 @@ export interface Report {
   detail: string;
   evidenceContent: string;
   status: ReportStatus;
-  // 우선순위 & SLA (기능명세서 9.1)
-  priorityScore: number;
+  // 우선순위 & SLA (기능명세서 9.1, ERD v2.1 필드 정합)
+  priorityScore: number; // 0~100
   slaDeadline: string;
   slaProgress: number; // 0~1 (1이면 초과)
-  assignedTo: string | null;
+  slaStatus: SlaStatus; // API v2.1 신규: 서버 계산 라벨
+  assignedTo: number | null; // ERD v2.1: admin_accounts.id
+  assignedAdminName: string | null; // API v2.1: 표시명
   // 누적 신고
   accumulatedReportCount: number;
   createdAt: string;
   resolvedAt: string | null;
   resolvedBy: string | null;
   resolveNote: string | null;
-  sanctionType: 'NONE' | 'WARNING' | 'SUSPEND_7D' | 'BANNED' | null;
+  sanctionType: 'NONE' | SanctionType | null;
   targetPreviousReports: TargetPreviousReport[];
 }
 
@@ -106,13 +120,17 @@ export interface ContactDetection {
   detectedAt: string;
 }
 
-// 기능명세서 기준 커서 기반 검색 파라미터
+// 기능명세서 기준 커서 기반 검색 파라미터 (API v2.1 확장)
 export interface ReportSearchParams {
   status?: ReportStatus;
   reason?: ReportReason;
-  sort?: string;
+  sort?: 'priority' | 'createdAt' | 'sla';
   cursor?: string;
   limit?: number;
   dateFrom?: string;
   dateTo?: string;
+  // v2.1 신규 필터
+  assignedTo?: number | 'me' | 'unassigned';
+  slaOverdue?: boolean;
+  minPriority?: number; // 0~100
 }

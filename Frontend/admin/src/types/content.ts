@@ -24,10 +24,12 @@ export interface TopicSchedule {
   isOverridden: boolean;
 }
 
-// ─── 공지사항(Notice) ── ERD v2.0 기준
+// ─── 공지사항(Notice) ── ERD v2.1 기준 (targetAudience Enum 5종)
 export type NoticeCategory = 'GENERAL' | 'MAINTENANCE' | 'TERMS_CHANGE' | 'URGENT';
 export type NoticeStatus = 'DRAFT' | 'PUBLISHED' | 'HIDDEN';
 export type NoticePriority = 'HIGH' | 'NORMAL';
+// v2.1 신규 — ERD notices.target_audience 정합
+export type NoticeTargetAudience = 'ALL' | 'NEW_USER' | 'ACTIVE_USER' | 'PREMIUM' | 'DORMANT';
 
 export interface Notice {
   id: number;
@@ -41,7 +43,7 @@ export interface Notice {
   createdBy: string;
   createdAt: string;
   viewCount: number;
-  targetAudience: string;
+  targetAudience: NoticeTargetAudience; // v2.1: 타입 강화
 }
 
 export interface NoticeCreateRequest {
@@ -51,7 +53,7 @@ export interface NoticeCreateRequest {
   priority: NoticePriority;
   status: NoticeStatus;
   publishedAt?: string;
-  targetAudience?: string;
+  targetAudience?: NoticeTargetAudience; // v2.1: 타입 강화. URGENT/MAINTENANCE 시 자동 ALL 보정
 }
 
 export interface NoticeSearchParams {
@@ -100,8 +102,14 @@ export interface TermsVersionHistory {
   change: string;
 }
 
-// ─── 예제 일기(Example Diary) ──
-export type ExampleDiaryCategory = 'DAILY' | 'EMOTION' | 'GROWTH' | 'RELATIONSHIP';
+// ─── 예제 일기(Example Diary) ── ERD v2.1 카테고리 6종 확장 (weekly_topics와 통일)
+export type ExampleDiaryCategory =
+  | 'GRATITUDE'
+  | 'GROWTH'
+  | 'DAILY'
+  | 'EMOTION'
+  | 'RELATIONSHIP'
+  | 'SEASONAL';
 export type ExampleDiaryTarget = 'ONBOARDING' | 'HELP' | 'FAQ';
 
 export interface ExampleDiary {
