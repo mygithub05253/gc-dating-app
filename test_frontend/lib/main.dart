@@ -13,7 +13,7 @@ class EmberTestApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ember API Test',
+      title: 'Ember Test',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFFF6B35),
@@ -21,472 +21,1157 @@ class EmberTestApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const ApiTestPage(),
+      home: const SplashScreen(),
     );
   }
 }
 
-class ApiTestPage extends StatefulWidget {
-  const ApiTestPage({super.key});
+// ── 공통 상태 관리 ──
+class AppState {
+  static final AppState _instance = AppState._();
+  factory AppState() => _instance;
+  AppState._();
 
-  @override
-  State<ApiTestPage> createState() => _ApiTestPageState();
-}
-
-class _ApiTestPageState extends State<ApiTestPage> {
   // 배포 서버: https://ember-app.duckdns.org
   // 에뮬레이터 로컬: http://10.0.2.2:8080
   final String baseUrl = 'https://ember-app.duckdns.org';
-
   final Dio dio = Dio();
+
   String? accessToken;
   String? refreshToken;
   String? kakaoAccessToken;
-  String? generatedNickname;
-  final List<String> logs = [];
+  int? userId;
+  int onboardingStep = 0;
+  bool onboardingCompleted = false;
+  String? accountStatus;
+  String? restoreToken;
 
-  void log(String message) {
-    setState(() {
-      logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] $message');
-      if (logs.length > 50) logs.removeLast();
-    });
-  }
+  Options get authHeaders => Options(
+    headers: {'Authorization': 'Bearer $accessToken'},
+  );
 
-  /// 에러 메시지 추출 (서버 에러코드 포함)
   String errMsg(dynamic e) {
     if (e is DioException && e.response?.data != null) {
       final data = e.response!.data;
-      if (data is Map) {
-        return '[${data['code']}] ${data['message']}';
-      }
+      if (data is Map) return '[${data['code']}] ${data['message']}';
     }
     return '$e';
   }
+}
 
-  // 1. 카카오 SDK 로그인 → Access Token 획득
-  Future<void> kakaoLogin() async {
+// ══════════════════════════════════════
+// 1.1 스플래시 및 자동 로그인
+// ══════════════════════════════════════
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  String status = '로딩 중...';
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAutoLogin();
+  }
+
+  Future<void> _checkAutoLogin() async {
+    await Future.delayed(const Duration(seconds: 2));
+    final app = AppState();
+
+    // 저장된 RT 없으면 로그인 화면으로
+    if (app.refreshToken == null) {
+      setState(() => status = '로그인이 필요합니다');
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted) _goToLogin();
+      return;
+    }
+
+    // 자동 로그인 시도
     try {
+      final res = await app.dio.post('${app.baseUrl}/api/auth/refresh',
+        data: {'refreshToken': app.refreshToken});
+      app.accessToken = res.data['data']['accessToken'];
+      app.refreshToken = res.data['data']['refreshToken'];
+      if (mounted) _goToHome();
+    } catch (e) {
+      setState(() => status = '세션 만료');
+      await Future.delayed(const Duration(seconds: 1));
+      if (mounted) _goToLogin();
+    }
+  }
+
+  void _goToLogin() => Navigator.pushReplacement(
+    context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+  void _goToHome() => Navigator.pushReplacement(
+    context, MaterialPageRoute(builder: (_) => const HomeScreen()));
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('🔥', style: TextStyle(fontSize: 64)),
+            const SizedBox(height: 16),
+            const Text('Ember', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(status, style: const TextStyle(color: Colors.white70)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 2.2 소셜 로그인 (카카오)
+// ══════════════════════════════════════
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  String? message;
+  bool loading = false;
+
+  Future<void> _kakaoLogin() async {
+    setState(() { loading = true; message = null; });
+    final app = AppState();
+
+    try {
+      // 1. 카카오 SDK 로그인
       OAuthToken token;
       if (await isKakaoTalkInstalled()) {
         token = await UserApi.instance.loginWithKakaoTalk();
-        log('카카오톡으로 로그인 성공');
       } else {
         token = await UserApi.instance.loginWithKakaoAccount();
-        log('카카오 계정으로 로그인 성공');
       }
-      kakaoAccessToken = token.accessToken;
-      log('카카오 AT: ${kakaoAccessToken!.substring(0, 20)}...');
-    } catch (e) {
-      log('카카오 로그인 실패: ${errMsg(e)}');
-    }
-  }
+      app.kakaoAccessToken = token.accessToken;
+      setState(() => message = '카카오 로그인 성공');
 
-  // 2. 서버 소셜 로그인
-  Future<void> socialLogin() async {
-    if (kakaoAccessToken == null) {
-      log('먼저 카카오 로그인을 하세요');
-      return;
-    }
-    try {
-      final res = await dio.post('$baseUrl/api/auth/social', data: {
+      // 2. 서버 소셜 로그인
+      final res = await app.dio.post('${app.baseUrl}/api/auth/social', data: {
         'provider': 'KAKAO',
-        'socialToken': kakaoAccessToken,
+        'socialToken': app.kakaoAccessToken,
       });
       final data = res.data['data'];
-      accessToken = data['accessToken'];
-      refreshToken = data['refreshToken'];
-      dio.options.headers['Authorization'] = 'Bearer $accessToken';
+      app.accessToken = data['accessToken'];
+      app.refreshToken = data['refreshToken'];
+      app.userId = data['userId'];
+      app.onboardingStep = data['onboardingStep'];
+      app.onboardingCompleted = data['onboardingCompleted'];
+      app.accountStatus = data['accountStatus'];
+      app.restoreToken = data['restoreToken'];
 
-      log('서버 로그인 성공! userId=${data['userId']}, '
-          'isNew=${data['isNewUser']}, '
-          'step=${data['onboardingStep']}');
+      setState(() => message = '서버 로그인 성공! (userId=${data['userId']})');
 
-      if (data['accountStatus'] == 'PENDING_DELETION') {
-        log('-> 탈퇴 유예 계정 -> 복구 화면');
-      } else if (data['onboardingStep'] == 0) {
-        log('-> 온보딩 미시작 -> 프로필 등록');
-      } else if (data['onboardingStep'] == 1) {
-        log('-> 프로필 완료 -> 이상형 설정');
-      } else {
-        log('-> 온보딩 완료 -> 홈');
+      // 3. 분기
+      if (mounted) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (data['accountStatus'] == 'PENDING_DELETION') {
+          Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const RestoreScreen()));
+        } else if (data['isNewUser'] == true) {
+          Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const ConsentScreen()));
+        } else if (data['onboardingStep'] == 0) {
+          Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const ProfileSetupScreen()));
+        } else if (data['onboardingStep'] == 1) {
+          Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const IdealTypeScreen()));
+        } else {
+          Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const HomeScreen()));
+        }
       }
     } catch (e) {
-      log('서버 로그인 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 3. 약관 동의
-  Future<void> consentUserTerms() async {
-    try {
-      await dio.post('$baseUrl/api/consent',
-        data: {'consentType': 'USER_TERMS'},
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      log('서비스 이용약관 동의 완료');
-    } catch (e) {
-      log('약관 동의 실패: ${errMsg(e)}');
-    }
-  }
-
-  Future<void> consentAiTerms() async {
-    try {
-      await dio.post('$baseUrl/api/consent',
-        data: {'consentType': 'AI_TERMS'},
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      log('AI 분석 동의 완료');
-    } catch (e) {
-      log('AI 동의 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 4. 닉네임 생성
-  Future<void> generateNickname() async {
-    try {
-      final res = await dio.post('$baseUrl/api/users/nickname/generate');
-      generatedNickname = res.data['data']['nickname'];
-      log('닉네임 생성: $generatedNickname');
-    } catch (e) {
-      log('닉네임 생성 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 5. 프로필 등록
-  Future<void> createProfile() async {
-    if (generatedNickname == null) {
-      log('먼저 닉네임을 생성하세요');
-      return;
-    }
-    try {
-      final res = await dio.post('$baseUrl/api/users/profile',
-        data: {
-          'nickname': generatedNickname,
-          'realName': '테스트',
-          'birthDate': '2000-01-15',
-          'gender': 'MALE',
-          'sido': '경기도',
-          'sigungu': '성남시',
-          'school': '가천대학교',
-        },
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      log('프로필 등록 성공: nickname=${res.data['data']['nickname']}');
-    } catch (e) {
-      log('프로필 등록 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 6. 키워드 목록 조회
-  Future<void> getKeywords() async {
-    try {
-      final res = await dio.get('$baseUrl/api/users/ideal-type/keyword-list');
-      final keywords = res.data['data']['keywords'] as List;
-      log('키워드 ${keywords.length}개: ${keywords.map((k) => k['label']).join(', ')}');
-    } catch (e) {
-      log('키워드 조회 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 7. 이상형 설정
-  Future<void> saveIdealType() async {
-    try {
-      final listRes = await dio.get('$baseUrl/api/users/ideal-type/keyword-list');
-      final keywords = listRes.data['data']['keywords'] as List;
-      if (keywords.length < 3) {
-        log('키워드가 3개 미만 (DB 시드 필요)');
-        return;
-      }
-      final ids = keywords.take(3).map((k) => k['id']).toList();
-
-      final res = await dio.post('$baseUrl/api/users/ideal-type/keywords',
-        data: {'keywordIds': ids},
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      log('이상형 설정 완료: ${res.data['data']['keywords']}');
-    } catch (e) {
-      log('이상형 설정 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 8. 내 프로필 조회
-  Future<void> getMyProfile() async {
-    try {
-      final res = await dio.get('$baseUrl/api/users/me',
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      final data = res.data['data'];
-      log('프로필: ${data['nickname']}, '
-          'step=${data['onboardingStep']}, '
-          'completed=${data['onboardingCompleted']}, '
-          'keywords=${data['idealKeywords']?.length ?? 0}개');
-    } catch (e) {
-      log('프로필 조회 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 9. 토큰 갱신
-  Future<void> refreshTokenApi() async {
-    try {
-      final res = await dio.post('$baseUrl/api/auth/refresh',
-        data: {'refreshToken': refreshToken},
-      );
-      accessToken = res.data['data']['accessToken'];
-      refreshToken = res.data['data']['refreshToken'];
-      log('토큰 갱신 성공!');
-    } catch (e) {
-      log('토큰 갱신 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 10. 로그아웃
-  Future<void> logout() async {
-    try {
-      await dio.post('$baseUrl/api/auth/logout',
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      log('로그아웃 성공!');
-      accessToken = null;
-      refreshToken = null;
-      kakaoAccessToken = null;
-    } catch (e) {
-      log('로그아웃 실패: ${errMsg(e)}');
-    }
-  }
-
-  // ── 일기 API ──
-
-  // 11. 당일 일기 확인
-  Future<void> checkTodayDiary() async {
-    try {
-      final res = await dio.get('$baseUrl/api/diaries/today',
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      final data = res.data['data'];
-      log('당일 일기: exists=${data['exists']}, diaryId=${data['diaryId']}');
-    } catch (e) {
-      log('당일 일기 확인 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 12. 일기 작성
-  Future<void> createDiary() async {
-    try {
-      final res = await dio.post('$baseUrl/api/diaries',
-        data: {
-          'content': '오늘은 정말 좋은 날이었다. 아침에 일어나서 커피를 마시고 산책을 했다. 날씨가 정말 좋아서 기분이 상쾌했다. 공원에서 새소리를 들으며 걷다 보니 마음이 편안해졌다. 요즘 바쁜 일상에서 이런 여유를 즐길 수 있어서 감사하다. 저녁에는 친구와 맛있는 저녁을 먹으며 이런저런 이야기를 나눴다. 서로의 근황을 공유하고 함께 웃는 시간이 참 소중하게 느껴졌다. 매일 이렇게 소소한 행복을 느끼며 살 수 있다면 정말 좋겠다.',
-        },
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      final data = res.data['data'];
-      log('일기 작성 성공: diaryId=${data['diaryId']}');
-    } catch (e) {
-      log('일기 작성 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 13. 일기 목록 조회
-  Future<void> getDiaries() async {
-    try {
-      final res = await dio.get('$baseUrl/api/diaries',
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      final data = res.data['data'];
-      final diaries = data['diaries'] as List;
-      log('일기 ${data['totalCount']}건: ${diaries.map((d) => 'id=${d['diaryId']}').join(', ')}');
-    } catch (e) {
-      log('일기 목록 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 14. 일기 상세 조회
-  Future<void> getDiaryDetail() async {
-    try {
-      // 먼저 당일 일기 ID 확인
-      final todayRes = await dio.get('$baseUrl/api/diaries/today',
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      final diaryId = todayRes.data['data']['diaryId'];
-      if (diaryId == null) {
-        log('조회할 일기 없음 (먼저 작성하세요)');
-        return;
-      }
-      final res = await dio.get('$baseUrl/api/diaries/$diaryId',
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      final data = res.data['data'];
-      log('일기 상세: id=${data['diaryId']}, '
-          '${data['content'].toString().substring(0, 20)}..., '
-          'editable=${data['isEditable']}');
-    } catch (e) {
-      log('일기 상세 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 15. 일기 수정
-  Future<void> updateDiary() async {
-    try {
-      final todayRes = await dio.get('$baseUrl/api/diaries/today',
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      final diaryId = todayRes.data['data']['diaryId'];
-      if (diaryId == null) {
-        log('수정할 일기 없음');
-        return;
-      }
-      final res = await dio.patch('$baseUrl/api/diaries/$diaryId',
-        data: {
-          'content': '수정된 일기 내용입니다. 오늘 하루를 돌아보니 참 많은 일이 있었다. 아침에는 프로젝트 회의가 있었고 점심에는 팀원들과 맛있는 걸 먹었다. 오후에는 코딩에 집중했는데 새로운 기능이 잘 동작해서 기분이 좋았다. 저녁에는 운동을 하고 집에 와서 일기를 쓰고 있다. 내일도 좋은 하루가 되길 바란다. 이런 하루하루가 쌓여서 좋은 추억이 될 것이다. 돌아보면 오늘도 참 감사한 하루였다고 생각한다.',
-        },
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      log('일기 수정 성공: diaryId=${res.data['data']['diaryId']}');
-    } catch (e) {
-      log('일기 수정 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 16. 임시저장 생성
-  Future<void> createDraft() async {
-    try {
-      final res = await dio.post('$baseUrl/api/diaries/draft',
-        data: {'content': '임시저장 테스트 내용입니다.'},
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      log('임시저장 성공: draftId=${res.data['data']['draftId']}');
-    } catch (e) {
-      log('임시저장 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 17. 임시저장 목록
-  Future<void> getDrafts() async {
-    try {
-      final res = await dio.get('$baseUrl/api/diaries/drafts',
-        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
-      );
-      final data = res.data['data'];
-      log('임시저장 ${data['totalCount']}건');
-    } catch (e) {
-      log('임시저장 목록 실패: ${errMsg(e)}');
-    }
-  }
-
-  // 18. 헬스체크
-  Future<void> healthCheck() async {
-    try {
-      final res = await dio.get('$baseUrl/api/health');
-      log('헬스체크: ${res.data['data']['status']}');
-    } catch (e) {
-      log('헬스체크 실패: ${errMsg(e)}');
+      setState(() { message = app.errMsg(e); loading = false; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ember API Test'),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          // 상태 바
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            color: accessToken != null ? Colors.green.shade900 : Colors.red.shade900,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  accessToken != null ? '서버 로그인됨' : '미로그인',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('🔥', style: TextStyle(fontSize: 48)),
+              const SizedBox(height: 8),
+              const Text('Ember 시작하기', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text('프로필 사진 없이, 내면을 먼저 보는 소개팅',
+                style: TextStyle(color: Colors.white54), textAlign: TextAlign.center),
+              const SizedBox(height: 48),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: loading ? null : _kakaoLogin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFEE500),
+                    foregroundColor: Colors.black87,
+                  ),
+                  child: loading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('카카오로 시작', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
-                if (kakaoAccessToken != null)
-                  Text('카카오 AT: ${kakaoAccessToken!.substring(0, 20)}...',
-                    style: const TextStyle(fontSize: 11, color: Colors.white70)),
+              ),
+              if (message != null) ...[
+                const SizedBox(height: 16),
+                Text(message!, style: TextStyle(
+                  color: message!.contains('성공') ? Colors.greenAccent : Colors.redAccent,
+                  fontSize: 13)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 2.2 약관 동의 (신규 가입)
+// ══════════════════════════════════════
+class ConsentScreen extends StatefulWidget {
+  const ConsentScreen({super.key});
+
+  @override
+  State<ConsentScreen> createState() => _ConsentScreenState();
+}
+
+class _ConsentScreenState extends State<ConsentScreen> {
+  bool userTerms = false;
+  bool aiTerms = false;
+  String? message;
+
+  Future<void> _submit() async {
+    final app = AppState();
+    try {
+      if (userTerms) {
+        await app.dio.post('${app.baseUrl}/api/consent',
+          data: {'consentType': 'USER_TERMS'}, options: app.authHeaders);
+      }
+      if (aiTerms) {
+        await app.dio.post('${app.baseUrl}/api/consent',
+          data: {'consentType': 'AI_TERMS'}, options: app.authHeaders);
+      }
+      if (mounted) {
+        Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (_) => const ProfileSetupScreen()));
+      }
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('약관 동의')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('서비스 이용을 위해\n약관에 동의해주세요',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 32),
+            CheckboxListTile(
+              title: const Text('서비스 이용약관 (필수)'),
+              value: userTerms,
+              onChanged: (v) => setState(() => userTerms = v!),
+            ),
+            CheckboxListTile(
+              title: const Text('AI 분석 동의 (필수)'),
+              value: aiTerms,
+              onChanged: (v) => setState(() => aiTerms = v!),
+            ),
+            const Spacer(),
+            if (message != null) Text(message!, style: const TextStyle(color: Colors.redAccent)),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity, height: 48,
+              child: ElevatedButton(
+                onPressed: userTerms && aiTerms ? _submit : null,
+                child: const Text('전체 동의 후 계속'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 2.6 계정 복구
+// ══════════════════════════════════════
+class RestoreScreen extends StatelessWidget {
+  const RestoreScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppState();
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.warning_amber, size: 64, color: Colors.amber),
+              const SizedBox(height: 16),
+              const Text('탈퇴 유예 중인 계정', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity, height: 48,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    try {
+                      final res = await app.dio.post('${app.baseUrl}/api/auth/restore',
+                        data: {'restoreToken': app.restoreToken});
+                      app.accessToken = res.data['data']['accessToken'];
+                      app.refreshToken = res.data['data']['refreshToken'];
+                      if (context.mounted) {
+                        Navigator.pushReplacement(context,
+                          MaterialPageRoute(builder: (_) => const HomeScreen()));
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(app.errMsg(e))));
+                      }
+                    }
+                  },
+                  child: const Text('계정 복구'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen())),
+                child: const Text('탈퇴 진행', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 3.1 기본 프로필 설정
+// ══════════════════════════════════════
+class ProfileSetupScreen extends StatefulWidget {
+  const ProfileSetupScreen({super.key});
+
+  @override
+  State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
+}
+
+class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
+  final app = AppState();
+  String nickname = '';
+  final realNameCtrl = TextEditingController();
+  final birthCtrl = TextEditingController(text: '2000-01-15');
+  final schoolCtrl = TextEditingController();
+  String gender = 'MALE';
+  String sido = '경기도';
+  String sigungu = '성남시';
+  String? message;
+
+  @override
+  void initState() {
+    super.initState();
+    _generateNickname();
+  }
+
+  Future<void> _generateNickname() async {
+    try {
+      final res = await app.dio.post('${app.baseUrl}/api/users/nickname/generate');
+      setState(() => nickname = res.data['data']['nickname']);
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  Future<void> _submit() async {
+    try {
+      await app.dio.post('${app.baseUrl}/api/users/profile',
+        data: {
+          'nickname': nickname,
+          'realName': realNameCtrl.text,
+          'birthDate': birthCtrl.text,
+          'gender': gender,
+          'sido': sido,
+          'sigungu': sigungu,
+          'school': schoolCtrl.text.isEmpty ? null : schoolCtrl.text,
+        },
+        options: app.authHeaders);
+      if (mounted) {
+        Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (_) => const IdealTypeScreen()));
+      }
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('프로필 설정 (1/2)')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('기본 프로필 설정', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            TextField(controller: realNameCtrl,
+              decoration: const InputDecoration(labelText: '실명', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: InputDecorator(
+                decoration: const InputDecoration(labelText: '닉네임', border: OutlineInputBorder()),
+                child: Text(nickname.isEmpty ? '생성 중...' : nickname))),
+              const SizedBox(width: 8),
+              ElevatedButton(onPressed: _generateNickname, child: const Text('다시 생성')),
+            ]),
+            const SizedBox(height: 16),
+            TextField(controller: birthCtrl,
+              decoration: const InputDecoration(labelText: '생년월일 (YYYY-MM-DD)', border: OutlineInputBorder())),
+            const SizedBox(height: 16),
+            const Text('성별'),
+            Row(children: [
+              ChoiceChip(label: const Text('남'), selected: gender == 'MALE',
+                onSelected: (_) => setState(() => gender = 'MALE')),
+              const SizedBox(width: 8),
+              ChoiceChip(label: const Text('여'), selected: gender == 'FEMALE',
+                onSelected: (_) => setState(() => gender = 'FEMALE')),
+            ]),
+            const SizedBox(height: 16),
+            TextField(
+              decoration: const InputDecoration(labelText: '시/도', border: OutlineInputBorder()),
+              controller: TextEditingController(text: sido),
+              onChanged: (v) => sido = v),
+            const SizedBox(height: 16),
+            TextField(
+              decoration: const InputDecoration(labelText: '시/군/구', border: OutlineInputBorder()),
+              controller: TextEditingController(text: sigungu),
+              onChanged: (v) => sigungu = v),
+            const SizedBox(height: 16),
+            TextField(controller: schoolCtrl,
+              decoration: const InputDecoration(labelText: '학교 (선택)', border: OutlineInputBorder())),
+            const SizedBox(height: 24),
+            if (message != null) Text(message!, style: const TextStyle(color: Colors.redAccent)),
+            SizedBox(width: double.infinity, height: 48,
+              child: ElevatedButton(
+                onPressed: nickname.isNotEmpty && realNameCtrl.text.isNotEmpty ? _submit : null,
+                child: const Text('다음'))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 3.2 이상형 키워드 설정
+// ══════════════════════════════════════
+class IdealTypeScreen extends StatefulWidget {
+  const IdealTypeScreen({super.key});
+
+  @override
+  State<IdealTypeScreen> createState() => _IdealTypeScreenState();
+}
+
+class _IdealTypeScreenState extends State<IdealTypeScreen> {
+  final app = AppState();
+  List<dynamic> keywords = [];
+  Set<int> selected = {};
+  String? message;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadKeywords();
+  }
+
+  Future<void> _loadKeywords() async {
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/users/ideal-type/keyword-list');
+      setState(() => keywords = res.data['data']['keywords']);
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  Future<void> _submit() async {
+    try {
+      await app.dio.post('${app.baseUrl}/api/users/ideal-type/keywords',
+        data: {'keywordIds': selected.toList()}, options: app.authHeaders);
+      if (mounted) {
+        Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (_) => const TutorialScreen()));
+      }
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('이상형 설정 (2/2)')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('어떤 성격의 사람을\n원하시나요?',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('${selected.length}/3 선택됨', style: const TextStyle(color: Colors.white54)),
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 8, runSpacing: 8,
+              children: keywords.map((k) {
+                final id = k['id'] as int;
+                final isSelected = selected.contains(id);
+                return FilterChip(
+                  label: Text(k['label']),
+                  selected: isSelected,
+                  onSelected: (v) {
+                    setState(() {
+                      if (v && selected.length < 3) selected.add(id);
+                      else selected.remove(id);
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+            const Spacer(),
+            if (message != null) Text(message!, style: const TextStyle(color: Colors.redAccent)),
+            SizedBox(width: double.infinity, height: 48,
+              child: ElevatedButton(
+                onPressed: selected.isNotEmpty ? _submit : null,
+                child: const Text('시작하기'))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 3.3 튜토리얼
+// ══════════════════════════════════════
+class TutorialScreen extends StatelessWidget {
+  const TutorialScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = [
+      {'icon': '📝', 'title': '매일 일기 쓰기', 'desc': '하루를 돌아보며 일기를 작성해보세요'},
+      {'icon': '🤖', 'title': 'AI가 추천하는 상대', 'desc': 'AI가 성격을 분석하고 맞는 상대를 추천해줍니다'},
+      {'icon': '📖', 'title': '교환 일기로 관계 형성', 'desc': '서로 일기를 교환하며 내면을 알아가세요'},
+      {'icon': '💬', 'title': '채팅으로 만남', 'desc': '교환이 끝나면 채팅으로 더 가까워지세요'},
+    ];
+
+    return Scaffold(
+      body: PageView.builder(
+        itemCount: pages.length,
+        itemBuilder: (context, index) {
+          final page = pages[index];
+          return Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 인디케이터
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(pages.length, (i) => Container(
+                    width: 8, height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i == index ? Colors.orange : Colors.white24),
+                  )),
+                ),
+                const Spacer(),
+                Text(page['icon']!, style: const TextStyle(fontSize: 64)),
+                const SizedBox(height: 24),
+                Text(page['title']!, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Text(page['desc']!, style: const TextStyle(color: Colors.white54), textAlign: TextAlign.center),
+                const Spacer(),
+                if (index == pages.length - 1)
+                  SizedBox(width: double.infinity, height: 48,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final app = AppState();
+                        try {
+                          await app.dio.post('${app.baseUrl}/api/users/tutorial/complete',
+                            options: app.authHeaders);
+                        } catch (_) {}
+                        if (context.mounted) {
+                          Navigator.pushReplacement(context,
+                            MaterialPageRoute(builder: (_) => const HomeScreen()));
+                        }
+                      },
+                      child: const Text('시작하기')))
+                else
+                  const Text('스와이프하여 다음 →', style: TextStyle(color: Colors.white38)),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushReplacement(context,
+                      MaterialPageRoute(builder: (_) => const HomeScreen()));
+                  },
+                  child: const Text('건너뛰기', style: TextStyle(color: Colors.white38))),
               ],
             ),
-          ),
+          );
+        },
+      ),
+    );
+  }
+}
 
-          // 버튼 그리드
-          Expanded(
-            flex: 1,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _btn('헬스체크', healthCheck, Colors.blue),
-                  _btn('카카오 로그인', kakaoLogin, Colors.yellow.shade800),
-                  _btn('서버 로그인', socialLogin, Colors.orange),
-                  _btn('약관동의', consentUserTerms, Colors.deepOrange),
-                  _btn('AI동의', consentAiTerms, Colors.deepOrange),
-                  _btn('닉네임 생성', generateNickname, Colors.teal),
-                  _btn('프로필 등록', createProfile, Colors.purple),
-                  _btn('키워드 목록', getKeywords, Colors.cyan),
-                  _btn('이상형 설정', saveIdealType, Colors.pink),
-                  _btn('내 프로필', getMyProfile, Colors.indigo),
-                  // 일기 API
-                  _btn('당일일기확인', checkTodayDiary, Colors.green),
-                  _btn('일기 작성', createDiary, Colors.green.shade700),
-                  _btn('일기 목록', getDiaries, Colors.green.shade800),
-                  _btn('일기 상세', getDiaryDetail, Colors.lightGreen),
-                  _btn('일기 수정', updateDiary, Colors.lime.shade700),
-                  _btn('임시저장', createDraft, Colors.brown),
-                  _btn('임시저장목록', getDrafts, Colors.brown.shade700),
-                  // 기타
-                  _btn('토큰 갱신', refreshTokenApi, Colors.amber),
-                  _btn('로그아웃', logout, Colors.red),
-                ],
-              ),
-            ),
-          ),
+// ══════════════════════════════════════
+// 홈 화면 (도메인 4: 일기)
+// ══════════════════════════════════════
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
-          // 로그 영역
-          Expanded(
-            flex: 2,
-            child: Container(
-              width: double.infinity,
-              color: Colors.black87,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(8),
-                itemCount: logs.length,
-                itemBuilder: (_, i) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    logs[i],
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      color: logs[i].contains('성공') || logs[i].contains('완료')
-                          ? Colors.greenAccent
-                          : logs[i].contains('실패')
-                              ? Colors.redAccent
-                              : logs[i].contains('->')
-                                  ? Colors.amberAccent
-                                  : Colors.white70,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final app = AppState();
+  int _currentTab = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = [
+      const DiaryWriteTab(),
+      const DiaryHistoryTab(),
+      const DraftTab(),
+      const SettingsTab(),
+    ];
+
+    return Scaffold(
+      body: pages[_currentTab],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentTab,
+        onTap: (i) => setState(() => _currentTab = i),
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.edit), label: '일기 쓰기'),
+          BottomNavigationBarItem(icon: Icon(Icons.list), label: '히스토리'),
+          BottomNavigationBarItem(icon: Icon(Icons.drafts), label: '임시저장'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: '설정'),
         ],
       ),
     );
   }
+}
 
-  Widget _btn(String label, VoidCallback onPressed, Color color) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color.withValues(alpha: 0.8),
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+// ── 4.1 일기 작성 탭 ──
+class DiaryWriteTab extends StatefulWidget {
+  const DiaryWriteTab({super.key});
+
+  @override
+  State<DiaryWriteTab> createState() => _DiaryWriteTabState();
+}
+
+class _DiaryWriteTabState extends State<DiaryWriteTab> {
+  final app = AppState();
+  final contentCtrl = TextEditingController();
+  bool? todayExists;
+  int? todayDiaryId;
+  String? message;
+  bool isEdit = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _checkToday();
+    // 오늘 일기가 없으면 임시저장 확인
+    if (todayExists != true) {
+      await _checkDrafts();
+    }
+  }
+
+  Future<void> _checkToday() async {
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/diaries/today', options: app.authHeaders);
+      final data = res.data['data'];
+      setState(() {
+        todayExists = data['exists'];
+        todayDiaryId = data['diaryId'];
+      });
+      if (todayExists == true && todayDiaryId != null) {
+        // 기존 일기 로드
+        final detail = await app.dio.get('${app.baseUrl}/api/diaries/$todayDiaryId', options: app.authHeaders);
+        contentCtrl.text = detail.data['data']['content'];
+        setState(() => isEdit = detail.data['data']['isEditable']);
+      }
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  Future<void> _checkDrafts() async {
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/diaries/drafts', options: app.authHeaders);
+      final drafts = res.data['data']['drafts'] as List;
+      if (drafts.isNotEmpty && mounted) {
+        final latest = drafts.first;
+        final result = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('임시저장된 일기가 있어요'),
+            content: Text('${latest['content'].toString().substring(0, latest['content'].toString().length > 50 ? 50 : latest['content'].toString().length)}...\n\n이어서 작성하시겠어요?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('새로 시작')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('이어쓰기')),
+            ],
+          ),
+        );
+        if (result == true) {
+          contentCtrl.text = latest['content'];
+          setState(() {});
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _submit() async {
+    try {
+      if (todayExists == true && todayDiaryId != null) {
+        // 수정
+        await app.dio.patch('${app.baseUrl}/api/diaries/$todayDiaryId',
+          data: {'content': contentCtrl.text}, options: app.authHeaders);
+        setState(() => message = '일기 수정 완료!');
+      } else {
+        // 작성
+        final res = await app.dio.post('${app.baseUrl}/api/diaries',
+          data: {'content': contentCtrl.text}, options: app.authHeaders);
+        setState(() {
+          message = '일기 작성 완료! (id=${res.data['data']['diaryId']})';
+          todayExists = true;
+          todayDiaryId = res.data['data']['diaryId'];
+        });
+      }
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      await app.dio.post('${app.baseUrl}/api/diaries/draft',
+        data: {'content': contentCtrl.text}, options: app.authHeaders);
+      setState(() => message = '임시저장 완료!');
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final charCount = contentCtrl.text.length;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${now.month}월 ${now.day}일 (${['월','화','수','목','금','토','일'][now.weekday - 1]})'),
+        actions: [
+          if (todayExists == true)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Chip(label: Text('작성됨', style: TextStyle(fontSize: 11))),
+            ),
+        ],
       ),
-      child: Text(label, style: const TextStyle(fontSize: 13)),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: contentCtrl,
+                maxLines: null,
+                expands: true,
+                textAlignVertical: TextAlignVertical.top,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: '오늘 하루를 돌아보며 일기를 써보세요... (200~1,000자)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text('$charCount / 1000자',
+                  style: TextStyle(
+                    color: charCount >= 200 && charCount <= 1000
+                      ? Colors.greenAccent : Colors.redAccent)),
+                const Spacer(),
+                TextButton(onPressed: _saveDraft, child: const Text('임시저장')),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: charCount >= 200 && charCount <= 1000
+                    ? _submit : null,
+                  child: Text(todayExists == true ? '수정' : '제출')),
+              ],
+            ),
+            if (message != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(message!, style: TextStyle(
+                  color: message!.contains('완료') ? Colors.greenAccent : Colors.redAccent)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── 4.4 일기 히스토리 탭 ──
+class DiaryHistoryTab extends StatefulWidget {
+  const DiaryHistoryTab({super.key});
+
+  @override
+  State<DiaryHistoryTab> createState() => _DiaryHistoryTabState();
+}
+
+class _DiaryHistoryTabState extends State<DiaryHistoryTab> {
+  final app = AppState();
+  List<dynamic> diaries = [];
+  String? message;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/diaries', options: app.authHeaders);
+      setState(() => diaries = res.data['data']['diaries']);
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('나의 일기')),
+      body: diaries.isEmpty
+        ? Center(child: Text(message ?? '일기가 없습니다', style: const TextStyle(color: Colors.white54)))
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: diaries.length,
+              itemBuilder: (context, index) {
+                final d = diaries[index];
+                return Card(
+                  child: ListTile(
+                    title: Text(d['contentPreview'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Row(children: [
+                      Text(d['createdAt']?.toString().substring(0, 10) ?? ''),
+                      if (d['summary'] != null) ...[
+                        const SizedBox(width: 8),
+                        Chip(label: Text(d['category'] ?? '', style: const TextStyle(fontSize: 10))),
+                      ],
+                    ]),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      try {
+                        final res = await app.dio.get(
+                          '${app.baseUrl}/api/diaries/${d['diaryId']}', options: app.authHeaders);
+                        if (context.mounted) {
+                          Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => DiaryDetailScreen(diary: res.data['data'])));
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(app.errMsg(e))));
+                        }
+                      }
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+    );
+  }
+}
+
+// ── 4.4 일기 상세 ──
+class DiaryDetailScreen extends StatelessWidget {
+  final Map<String, dynamic> diary;
+  const DiaryDetailScreen({super.key, required this.diary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(diary['createdAt']?.toString().substring(0, 10) ?? ''),
+        actions: [
+          if (diary['isEditable'] == true)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Chip(label: Text('수정 가능', style: TextStyle(fontSize: 11, color: Colors.greenAccent))),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(diary['content'] ?? '', style: const TextStyle(fontSize: 16, height: 1.6)),
+            const Divider(height: 32),
+            if (diary['summary'] != null)
+              _tag('AI 요약', diary['summary']),
+            if (diary['category'] != null)
+              _tag('카테고리', diary['category']),
+            if (diary['emotionTags'] != null)
+              _tagList('감정', diary['emotionTags']),
+            if (diary['lifestyleTags'] != null)
+              _tagList('라이프스타일', diary['lifestyleTags']),
+            if (diary['toneTags'] != null)
+              _tagList('글쓰기 톤', diary['toneTags']),
+            if (diary['summary'] == null)
+              const Text('AI 분석 대기 중...', style: TextStyle(color: Colors.white38)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tag(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(children: [
+      Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white54)),
+      Expanded(child: Text(value)),
+    ]),
+  );
+
+  Widget _tagList(String label, List<dynamic> tags) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white54)),
+        const SizedBox(height: 4),
+        Wrap(spacing: 6, children: tags.map((t) =>
+          Chip(label: Text('${t['label']}', style: const TextStyle(fontSize: 12)))).toList()),
+      ],
+    ),
+  );
+}
+
+// ── 임시저장 탭 ──
+class DraftTab extends StatefulWidget {
+  const DraftTab({super.key});
+
+  @override
+  State<DraftTab> createState() => _DraftTabState();
+}
+
+class _DraftTabState extends State<DraftTab> {
+  final app = AppState();
+  List<dynamic> drafts = [];
+  String? message;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/diaries/drafts', options: app.authHeaders);
+      setState(() => drafts = res.data['data']['drafts']);
+    } catch (e) {
+      setState(() => message = app.errMsg(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('임시저장 (${drafts.length}/3)')),
+      body: drafts.isEmpty
+        ? Center(child: Text(message ?? '임시저장된 일기가 없습니다', style: const TextStyle(color: Colors.white54)))
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.builder(
+              padding: const EdgeInsets.all(12),
+              itemCount: drafts.length,
+              itemBuilder: (context, index) {
+                final d = drafts[index];
+                return Dismissible(
+                  key: Key('${d['draftId']}'),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    color: Colors.red, alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    child: const Icon(Icons.delete, color: Colors.white)),
+                  onDismissed: (_) async {
+                    try {
+                      await app.dio.delete(
+                        '${app.baseUrl}/api/diaries/draft/${d['draftId']}', options: app.authHeaders);
+                      _load();
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(app.errMsg(e))));
+                      }
+                    }
+                  },
+                  child: Card(
+                    child: ListTile(
+                      title: Text(d['content'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(d['savedAt']?.toString().substring(0, 16) ?? ''),
+                      trailing: const Text('← 밀어서 삭제', style: TextStyle(fontSize: 10, color: Colors.white38)),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+    );
+  }
+}
+
+// ── 설정 탭 (로그아웃 등) ──
+class SettingsTab extends StatelessWidget {
+  const SettingsTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppState();
+    return Scaffold(
+      appBar: AppBar(title: const Text('설정')),
+      body: ListView(
+        children: [
+          ListTile(
+            title: const Text('내 프로필'),
+            leading: const Icon(Icons.person),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/users/me', options: app.authHeaders);
+                final data = res.data['data'];
+                if (context.mounted) {
+                  showDialog(context: context, builder: (_) => AlertDialog(
+                    title: Text(data['nickname'] ?? ''),
+                    content: Text(
+                      '성별: ${data['gender']}\n'
+                      '지역: ${data['sido']} ${data['sigungu']}\n'
+                      '학교: ${data['school'] ?? '미입력'}\n'
+                      '온보딩: step=${data['onboardingStep']}\n'
+                      '키워드: ${data['idealKeywords']?.length ?? 0}개'),
+                  ));
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(app.errMsg(e))));
+                }
+              }
+            },
+          ),
+          ListTile(
+            title: const Text('토큰 갱신'),
+            leading: const Icon(Icons.refresh),
+            onTap: () async {
+              try {
+                final res = await app.dio.post('${app.baseUrl}/api/auth/refresh',
+                  data: {'refreshToken': app.refreshToken});
+                app.accessToken = res.data['data']['accessToken'];
+                app.refreshToken = res.data['data']['refreshToken'];
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('토큰 갱신 성공!')));
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(app.errMsg(e))));
+                }
+              }
+            },
+          ),
+          const Divider(),
+          ListTile(
+            title: const Text('로그아웃', style: TextStyle(color: Colors.red)),
+            leading: const Icon(Icons.logout, color: Colors.red),
+            onTap: () {
+              showDialog(context: context, builder: (_) => AlertDialog(
+                title: const Text('로그아웃'),
+                content: const Text('정말 로그아웃 하시겠어요?'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+                  TextButton(
+                    onPressed: () async {
+                      try {
+                        await app.dio.post('${app.baseUrl}/api/auth/logout', options: app.authHeaders);
+                      } catch (_) {}
+                      app.accessToken = null;
+                      app.refreshToken = null;
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        Navigator.pushAndRemoveUntil(context,
+                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                          (_) => false);
+                      }
+                    },
+                    child: const Text('로그아웃', style: TextStyle(color: Colors.red))),
+                ],
+              ));
+            },
+          ),
+        ],
+      ),
     );
   }
 }
