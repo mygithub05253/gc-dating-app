@@ -13,6 +13,12 @@ import {
   NOTICE_STATUS_LABELS,
   NOTICE_STATUS_COLORS,
 } from '@/lib/constants';
+import type {
+  NoticeCategory,
+  NoticeStatus,
+  NoticePriority,
+  NoticeTargetAudience,
+} from '@/types/content';
 import {
   RefreshCw,
   Plus,
@@ -24,11 +30,59 @@ import {
   Megaphone,
   AlertTriangle,
   Info,
+  Users,
+  UserPlus,
+  Flame,
+  Crown,
+  Moon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-// Mock 공지사항 데이터 (ERD v2.0: GENERAL/MAINTENANCE/TERMS_CHANGE/URGENT, DRAFT/PUBLISHED/HIDDEN)
-const MOCK_NOTICES = [
+// v2.1 신규: 타겟 오디언스 라벨 / 색상 / 아이콘 (ERD v2.1 notices.target_audience Enum 5종)
+const TARGET_AUDIENCE_LABELS: Record<NoticeTargetAudience, string> = {
+  ALL: '전체',
+  NEW_USER: '신규 유저',
+  ACTIVE_USER: '활성 유저',
+  PREMIUM: '프리미엄',
+  DORMANT: '휴면 유저',
+};
+
+const TARGET_AUDIENCE_COLORS: Record<NoticeTargetAudience, string> = {
+  ALL: 'bg-blue-50 text-blue-700 border-blue-200',
+  NEW_USER: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  ACTIVE_USER: 'bg-orange-50 text-orange-700 border-orange-200',
+  PREMIUM: 'bg-purple-50 text-purple-700 border-purple-200',
+  DORMANT: 'bg-slate-50 text-slate-700 border-slate-200',
+};
+
+const TARGET_AUDIENCE_ICONS: Record<NoticeTargetAudience, React.ReactNode> = {
+  ALL: <Users className="h-3 w-3" />,
+  NEW_USER: <UserPlus className="h-3 w-3" />,
+  ACTIVE_USER: <Flame className="h-3 w-3" />,
+  PREMIUM: <Crown className="h-3 w-3" />,
+  DORMANT: <Moon className="h-3 w-3" />,
+};
+
+// URGENT/MAINTENANCE 카테고리는 자동으로 ALL로 보정 (관리자 기능명세서 v2.1)
+const FORCE_ALL_CATEGORIES: NoticeCategory[] = ['URGENT', 'MAINTENANCE'];
+
+type MockNotice = {
+  id: number;
+  title: string;
+  content: string;
+  category: NoticeCategory;
+  priority: NoticePriority;
+  isPinned: boolean;
+  status: NoticeStatus;
+  publishedAt: string | null;
+  createdAt: string;
+  createdBy: string;
+  viewCount: number;
+  targetAudience: NoticeTargetAudience;
+};
+
+// Mock 공지사항 데이터 (ERD v2.1: targetAudience 5종 샘플 포함)
+const MOCK_NOTICES: MockNotice[] = [
   {
     id: 1,
     title: '서비스 이용약관 변경 안내',
@@ -55,7 +109,7 @@ const MOCK_NOTICES = [
     createdAt: '2024-03-19T18:00:00',
     createdBy: '이운영',
     viewCount: 8934,
-    targetAudience: 'ALL',
+    targetAudience: 'ACTIVE_USER',
   },
   {
     id: 3,
@@ -73,8 +127,8 @@ const MOCK_NOTICES = [
   },
   {
     id: 4,
-    title: '새로운 감정 코칭 기능 출시',
-    content: 'AI 기반 감정 코칭 기능이 새롭게 출시되었습니다. 일기를 작성하시면...',
+    title: '새로 가입하신 회원님께 드리는 안내',
+    content: 'Ember에 오신 걸 환영합니다! 교환일기를 처음 시작하는 분들을 위한 팁을 소개합니다.',
     category: 'GENERAL',
     priority: 'NORMAL',
     isPinned: false,
@@ -83,12 +137,12 @@ const MOCK_NOTICES = [
     createdAt: '2024-03-18T10:00:00',
     createdBy: '이운영',
     viewCount: 6789,
-    targetAudience: 'ALL',
+    targetAudience: 'NEW_USER',
   },
   {
     id: 5,
-    title: '봄맞이 이벤트 - 커플 탄생 축하',
-    content: '봄을 맞아 Ember에서 특별한 이벤트를 준비했습니다!',
+    title: '[프리미엄 전용] 봄맞이 혜택 안내',
+    content: '프리미엄 회원님께만 드리는 특별한 혜택이 준비되었습니다!',
     category: 'GENERAL',
     priority: 'NORMAL',
     isPinned: false,
@@ -97,21 +151,21 @@ const MOCK_NOTICES = [
     createdAt: '2024-03-23T11:00:00',
     createdBy: '박신입',
     viewCount: 0,
-    targetAudience: 'ALL',
+    targetAudience: 'PREMIUM',
   },
   {
     id: 6,
-    title: '개인정보 처리방침 변경 사전 안내',
-    content: '2024년 4월 1일부터 개인정보 처리방침이 변경될 예정입니다.',
-    category: 'TERMS_CHANGE',
-    priority: 'HIGH',
+    title: '오랜만입니다! Ember로 돌아오세요',
+    content: '한동안 뵙지 못한 회원님께 특별 이벤트를 준비했습니다.',
+    category: 'GENERAL',
+    priority: 'NORMAL',
     isPinned: false,
     status: 'DRAFT',
     publishedAt: '2024-03-25T09:00:00',
     createdAt: '2024-03-23T10:00:00',
     createdBy: '김관리',
     viewCount: 0,
-    targetAudience: 'ALL',
+    targetAudience: 'DORMANT',
   },
   {
     id: 7,
@@ -143,7 +197,7 @@ const MOCK_NOTICES = [
   },
 ];
 
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+const CATEGORY_ICONS: Record<NoticeCategory, React.ReactNode> = {
   GENERAL: <Info className="h-4 w-4" />,
   MAINTENANCE: <Bell className="h-4 w-4" />,
   TERMS_CHANGE: <AlertTriangle className="h-4 w-4" />,
@@ -154,42 +208,44 @@ export default function NoticesManagementPage() {
   const [keyword, setKeyword] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [audienceFilter, setAudienceFilter] = useState<string>('ALL_AUDIENCE'); // v2.1 신규
 
   const handleRefresh = () => {
     toast.success('공지사항 목록을 새로고침했습니다.');
   };
 
   const handleAddNotice = () => {
-    toast.success('새 공지사항 작성 모달이 열립니다.');
+    toast.success('새 공지사항 작성 모달이 열립니다. (URGENT/MAINTENANCE 선택 시 타겟이 ALL로 자동 잠김)');
   };
 
   const handleEdit = (noticeId: number) => {
-    toast.success('공지사항 수정 모달이 열립니다.');
+    toast.success(`공지사항 #${noticeId} 수정 모달이 열립니다.`);
   };
 
   const handleDelete = (noticeId: number) => {
-    toast.success('공지사항을 삭제했습니다.');
+    toast.success(`공지사항 #${noticeId}을 삭제했습니다.`);
   };
 
   const handleTogglePin = (noticeId: number) => {
-    toast.success('고정 상태를 변경했습니다.');
+    toast.success(`공지사항 #${noticeId}의 고정 상태를 변경했습니다.`);
   };
 
   // Filter notices
-  const filteredNotices = MOCK_NOTICES.filter(notice => {
-    const matchesKeyword = !keyword ||
-      notice.title.includes(keyword) ||
-      notice.content.includes(keyword);
+  const filteredNotices = MOCK_NOTICES.filter((notice) => {
+    const matchesKeyword =
+      !keyword || notice.title.includes(keyword) || notice.content.includes(keyword);
     const matchesCategory = categoryFilter === 'ALL' || notice.category === categoryFilter;
     const matchesStatus = statusFilter === 'ALL' || notice.status === statusFilter;
-    return matchesKeyword && matchesCategory && matchesStatus;
+    const matchesAudience =
+      audienceFilter === 'ALL_AUDIENCE' || notice.targetAudience === audienceFilter;
+    return matchesKeyword && matchesCategory && matchesStatus && matchesAudience;
   });
 
   return (
     <div>
       <PageHeader
         title="공지사항 관리"
-        description="서비스 공지사항 등록 및 관리"
+        description="서비스 공지사항 등록 및 관리 (v2.1 정합: targetAudience 5종)"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleRefresh}>
@@ -216,7 +272,7 @@ export default function NoticesManagementPage() {
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">게시중</div>
             <div className="mt-1 text-2xl font-bold text-green-600">
-              {MOCK_NOTICES.filter(n => n.status === 'PUBLISHED').length}
+              {MOCK_NOTICES.filter((n) => n.status === 'PUBLISHED').length}
             </div>
           </CardContent>
         </Card>
@@ -224,7 +280,7 @@ export default function NoticesManagementPage() {
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">초안</div>
             <div className="mt-1 text-2xl font-bold text-gray-500">
-              {MOCK_NOTICES.filter(n => n.status === 'DRAFT').length}
+              {MOCK_NOTICES.filter((n) => n.status === 'DRAFT').length}
             </div>
           </CardContent>
         </Card>
@@ -232,7 +288,7 @@ export default function NoticesManagementPage() {
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">숨김</div>
             <div className="mt-1 text-2xl font-bold text-zinc-500">
-              {MOCK_NOTICES.filter(n => n.status === 'HIDDEN').length}
+              {MOCK_NOTICES.filter((n) => n.status === 'HIDDEN').length}
             </div>
           </CardContent>
         </Card>
@@ -247,7 +303,7 @@ export default function NoticesManagementPage() {
             placeholder="공지사항 제목 또는 내용 검색"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -255,7 +311,9 @@ export default function NoticesManagementPage() {
           >
             <option value="ALL">전체 카테고리</option>
             {Object.entries(NOTICE_CATEGORY_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
+              <option key={key} value={key}>
+                {label}
+              </option>
             ))}
           </select>
           <select
@@ -265,7 +323,22 @@ export default function NoticesManagementPage() {
           >
             <option value="ALL">전체 상태</option>
             {Object.entries(NOTICE_STATUS_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+          {/* v2.1 신규: 타겟 오디언스 필터 */}
+          <select
+            value={audienceFilter}
+            onChange={(e) => setAudienceFilter(e.target.value)}
+            className="rounded-md border px-3 py-2 text-sm"
+          >
+            <option value="ALL_AUDIENCE">전체 타겟</option>
+            {Object.entries(TARGET_AUDIENCE_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
             ))}
           </select>
         </div>
@@ -273,69 +346,92 @@ export default function NoticesManagementPage() {
 
       {/* Notices List */}
       <div className="grid gap-4">
-        {filteredNotices.map(notice => (
-          <Card key={notice.id} className={notice.status === 'DRAFT' ? 'border-dashed' : ''}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {notice.isPinned && (
-                      <Pin className="h-4 w-4 text-red-500" />
-                    )}
-                    {notice.priority === 'HIGH' && (
-                      <Badge className="bg-red-100 text-red-800">중요</Badge>
-                    )}
-                    <Badge className={NOTICE_CATEGORY_COLORS[notice.category]}>
-                      <span className="flex items-center gap-1">
-                        {CATEGORY_ICONS[notice.category]}
-                        {NOTICE_CATEGORY_LABELS[notice.category]}
-                      </span>
-                    </Badge>
-                    <Badge className={NOTICE_STATUS_COLORS[notice.status]}>
-                      {NOTICE_STATUS_LABELS[notice.status]}
-                    </Badge>
-                  </div>
-                  <h3 className="mt-2 font-semibold">{notice.title}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                    {notice.content}
-                  </p>
-                </div>
-                <div className="flex gap-1 ml-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleTogglePin(notice.id)}
-                    className={notice.isPinned ? 'text-red-500' : ''}
-                  >
-                    <Pin className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleEdit(notice.id)}>
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDelete(notice.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t flex justify-between text-sm text-muted-foreground">
-                <div className="flex gap-4">
-                  <span>작성자: {notice.createdBy}</span>
-                  <span>조회: {notice.viewCount.toLocaleString()}</span>
-                </div>
-                <span>
-                  {notice.status === 'PUBLISHED' && notice.publishedAt
-                    ? `게시일: ${formatDateTime(notice.publishedAt)}`
-                    : `작성일: ${formatDateTime(notice.createdAt)}`
-                  }
-                </span>
-              </div>
+        {filteredNotices.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">
+              검색 결과가 없습니다.
             </CardContent>
           </Card>
-        ))}
+        ) : (
+          filteredNotices.map((notice) => {
+            const isForceAll = FORCE_ALL_CATEGORIES.includes(notice.category);
+            return (
+              <Card key={notice.id} className={notice.status === 'DRAFT' ? 'border-dashed' : ''}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {notice.isPinned && <Pin className="h-4 w-4 text-red-500" />}
+                        {notice.priority === 'HIGH' && (
+                          <Badge className="bg-red-100 text-red-800">중요</Badge>
+                        )}
+                        <Badge className={NOTICE_CATEGORY_COLORS[notice.category]}>
+                          <span className="flex items-center gap-1">
+                            {CATEGORY_ICONS[notice.category]}
+                            {NOTICE_CATEGORY_LABELS[notice.category]}
+                          </span>
+                        </Badge>
+                        <Badge className={NOTICE_STATUS_COLORS[notice.status]}>
+                          {NOTICE_STATUS_LABELS[notice.status]}
+                        </Badge>
+                        {/* v2.1: 타겟 오디언스 뱃지 */}
+                        <Badge
+                          variant="outline"
+                          className={`border ${TARGET_AUDIENCE_COLORS[notice.targetAudience]}`}
+                        >
+                          <span className="flex items-center gap-1">
+                            {TARGET_AUDIENCE_ICONS[notice.targetAudience]}
+                            {TARGET_AUDIENCE_LABELS[notice.targetAudience]}
+                            {isForceAll && (
+                              <span className="ml-1 text-[10px] text-muted-foreground">
+                                (자동 ALL)
+                              </span>
+                            )}
+                          </span>
+                        </Badge>
+                      </div>
+                      <h3 className="mt-2 font-semibold">{notice.title}</h3>
+                      <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                        {notice.content}
+                      </p>
+                    </div>
+                    <div className="flex gap-1 ml-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleTogglePin(notice.id)}
+                        className={notice.isPinned ? 'text-red-500' : ''}
+                      >
+                        <Pin className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(notice.id)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(notice.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t flex justify-between text-sm text-muted-foreground">
+                    <div className="flex gap-4">
+                      <span>작성자: {notice.createdBy}</span>
+                      <span>조회: {notice.viewCount.toLocaleString()}</span>
+                    </div>
+                    <span>
+                      {notice.status === 'PUBLISHED' && notice.publishedAt
+                        ? `게시일: ${formatDateTime(notice.publishedAt)}`
+                        : `작성일: ${formatDateTime(notice.createdAt)}`}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
     </div>
   );

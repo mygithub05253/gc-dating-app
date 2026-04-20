@@ -124,6 +124,52 @@ const MOCK_EXAMPLE_DIARIES: ExampleDiary[] = [
     createdBy: 2,
     createdAt: '2024-02-10T11:00:00',
   },
+  // v2.1: ExampleDiaryCategory 6종 확장 — GRATITUDE 샘플 추가
+  {
+    id: 11,
+    title: '작은 친절에 하루가 따뜻해졌습니다',
+    content: '오늘 아침 출근길에 카페에서 커피를 주문했는데, 앞에 있던 모르는 분이 제 커피값을 대신 계산해주셨어요. 놀라서 뒤돌아 봤더니 그분은 이미 웃으면서 나가고 계셨습니다. 그 순간 제 기분이 얼마나 따뜻해졌는지 몰라요. 별것 아닌 친절 한 번이 하루 종일 저를 기분 좋게 만들었고, 저도 오늘만큼은 누군가에게 작은 친절을 베풀어야겠다고 마음먹었습니다. 받은 만큼 돌려주는 게 아니라 또 다른 누군가에게 이어지면 좋겠다는 생각이 들었어요.',
+    category: 'GRATITUDE',
+    displayTarget: 'ONBOARDING',
+    displayOrder: 5,
+    isActive: true,
+    createdBy: 1,
+    createdAt: '2024-02-14T08:30:00',
+  },
+  {
+    id: 12,
+    title: '엄마의 반찬 한 통에 담긴 마음',
+    content: '주말에 본가에 내려갔다가 돌아오는 길, 엄마가 제 손에 반찬 통을 여러 개 들려 보내셨어요. 무겁다고 손사래를 쳤는데도 \"이거 없으면 네가 또 편의점 음식만 먹을 거잖아\"라며 기어코 담아주셨습니다. 집에 돌아와 냉장고에 반찬 통을 하나씩 넣다가 문득 이 안에 얼마나 많은 마음이 담겨 있는지 새삼 느꼈어요. 멀리서 자식 걱정하는 엄마의 마음이 매일 제 식탁 위에 올라와 있었다는 걸, 오늘에야 제대로 알아챘습니다.',
+    category: 'GRATITUDE',
+    displayTarget: 'HELP',
+    displayOrder: 4,
+    isActive: true,
+    createdBy: 2,
+    createdAt: '2024-02-18T19:00:00',
+  },
+  // v2.1: SEASONAL 샘플 추가
+  {
+    id: 13,
+    title: '봄의 첫 벚꽃이 피어난 날',
+    content: '출근길에 늘 지나다니는 공원 입구 벚나무에서 오늘 처음으로 벚꽃이 핀 걸 봤어요. 아직 완전히 만개한 건 아니지만 연분홍색 꽃잎이 가지 끝에 톡톡 올라온 모습이 너무 예뻤습니다. 겨우내 움츠러들어 있던 마음이 그 꽃 한 송이에 스르르 풀리는 것 같았어요. 아, 이제 정말 봄이구나. 출근하면서 그 풍경을 사진으로 남겼고, 하루 종일 마음이 들떠 있었습니다. 이번 주말에는 꼭 벚꽃 구경 가야겠어요.',
+    category: 'SEASONAL',
+    displayTarget: 'ONBOARDING',
+    displayOrder: 6,
+    isActive: true,
+    createdBy: 1,
+    createdAt: '2024-03-25T09:00:00',
+  },
+  {
+    id: 14,
+    title: '첫눈이 내리던 오후의 기억',
+    content: '오늘 오후 3시쯤 사무실 창밖으로 하얀 눈발이 날리기 시작했어요. 올해 첫눈이었습니다. 회의 중이었는데도 창밖에 자꾸 눈길이 갔고, 결국 회의가 끝나자마자 창가에 붙어 한참을 쳐다봤어요. 어른이 되고 나서는 눈이 오면 출퇴근 걱정부터 앞서는데, 오늘만큼은 정말 오랜만에 순수하게 눈 오는 풍경이 예뻐 보였습니다. 퇴근길에 첫눈을 맞으며 걸었던 그 시간이 올해의 마지막을 정리해주는 느낌이었어요.',
+    category: 'SEASONAL',
+    displayTarget: 'FAQ',
+    displayOrder: 4,
+    isActive: true,
+    createdBy: 2,
+    createdAt: '2024-03-27T16:00:00',
+  },
 ];
 
 const CATEGORY_LABELS: Record<ExampleDiaryCategory, string> = {
