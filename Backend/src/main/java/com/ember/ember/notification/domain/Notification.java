@@ -41,4 +41,17 @@ public class Notification {
 
     @Column(name = "sent_at", nullable = false)
     private LocalDateTime sentAt;
+
+    /** 알림 생성 */
+    public static Notification create(User user, String type, String title, String body, String deeplinkUrl) {
+        Notification notification = new Notification();
+        notification.user = user;
+        notification.type = type;
+        notification.title = title;
+        notification.body = body;
+        notification.deeplinkUrl = deeplinkUrl;
+        notification.isRead = false;
+        notification.sentAt = LocalDateTime.now();
+        return notification;
+    }
 }

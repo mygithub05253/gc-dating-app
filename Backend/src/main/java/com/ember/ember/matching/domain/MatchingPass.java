@@ -31,4 +31,14 @@ public class MatchingPass {
 
     @Column(name = "passed_at", nullable = false)
     private LocalDateTime passedAt;
+
+    /** skip 기록 생성 */
+    public static MatchingPass create(User user, Diary diary, User targetUser) {
+        MatchingPass pass = new MatchingPass();
+        pass.user = user;
+        pass.diary = diary;
+        pass.targetUser = targetUser;
+        pass.passedAt = LocalDateTime.now();
+        return pass;
+    }
 }

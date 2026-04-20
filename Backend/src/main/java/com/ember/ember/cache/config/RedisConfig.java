@@ -10,29 +10,10 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 /**
  * Redis 설정
  * application.yml의 spring.data.redis 설정을 기반으로 Lettuce 커넥션 팩토리가 자동 생성됨.
- *
- * Bean 2종:
- *   - stringRedisTemplate : 단순 문자열 값 저장 (캐시 키 관리, TTL 조작)
- *   - objectRedisTemplate : JSON 직렬화 객체 저장 (AI 분석 결과, 매칭 추천 목록 등)
+ * StringRedisTemplate은 Spring Boot 자동설정이 제공 (TokenService 등에서 사용).
  */
 @Configuration
 public class RedisConfig {
-
-    /**
-     * 문자열 전용 RedisTemplate
-     * Key: StringRedisSerializer, Value: StringRedisSerializer
-     */
-    @Bean(name = "stringRedisTemplate")
-    public RedisTemplate<String, String> stringRedisTemplate(RedisConnectionFactory factory) {
-        RedisTemplate<String, String> template = new RedisTemplate<>();
-        template.setConnectionFactory(factory);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(new StringRedisSerializer());
-        template.setHashKeySerializer(new StringRedisSerializer());
-        template.setHashValueSerializer(new StringRedisSerializer());
-        template.afterPropertiesSet();
-        return template;
-    }
 
     /**
      * 객체 JSON 직렬화 RedisTemplate

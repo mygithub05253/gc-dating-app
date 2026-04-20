@@ -92,8 +92,11 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: update
     show-sql: true
+
+  flyway:
+    enabled: false
 
   rabbitmq:
     host: localhost
@@ -102,6 +105,8 @@ spring:
     password: guest
 
 app:
+  jwt:
+    secret: ember-local-test-secret-32bytes!
   cors:
     allowed-origins:
       - http://localhost:3000

@@ -55,4 +55,35 @@ public interface DiaryRepository extends JpaRepository<Diary, Long> {
      */
     @Query("SELECT d FROM Diary d WHERE d.user.id = :userId ORDER BY d.date DESC")
     List<Diary> findRecentByUserId(@Param("userId") Long userId, Pageable pageable);
+
+    /**
+     * 일기 탐색 — 다른 사용자의 일기 목록 조회 (커서 기반 페이징).
+     * 본인/차단/skip 대상 제외, SUBMITTED 이상 상태만 노출.
+     */
+    @Query("""
+            SELECT d FROM Diary d JOIN FETCH d.user u
+            WHERE d.user.id != :userId
+              AND d.user.id NOT IN :excludeUserIds
+              AND d.id < :cursor
+            ORDER BY d.id DESC
+            """)
+    List<Diary> findExploreWithCursor(
+            @Param("userId") Long userId,
+            @Param("excludeUserIds") List<Long> excludeUserIds,
+            @Param("cursor") Long cursor,
+            Pageable pageable);
+
+    /**
+     * 일기 탐색 — 첫 페이지 (커서 없는 경우).
+     */
+    @Query("""
+            SELECT d FROM Diary d JOIN FETCH d.user u
+            WHERE d.user.id != :userId
+              AND d.user.id NOT IN :excludeUserIds
+            ORDER BY d.id DESC
+            """)
+    List<Diary> findExploreFirstPage(
+            @Param("userId") Long userId,
+            @Param("excludeUserIds") List<Long> excludeUserIds,
+            Pageable pageable);
 }

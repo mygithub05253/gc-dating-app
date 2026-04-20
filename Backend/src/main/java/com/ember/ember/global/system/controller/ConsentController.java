@@ -6,7 +6,7 @@ import com.ember.ember.global.response.ErrorCode;
 import com.ember.ember.global.security.CustomUserDetails;
 import com.ember.ember.global.system.domain.AiConsentLog;
 import com.ember.ember.global.system.dto.ConsentRequest;
-import com.ember.ember.global.system.repository.AiConsentLogRepository;
+import com.ember.ember.consent.repository.AiConsentLogRepository;
 import com.ember.ember.user.domain.User;
 import com.ember.ember.user.repository.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;

@@ -47,6 +47,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/diaries/weekly-topic").permitAll()
                         // WebSocket
                         .requestMatchers("/ws/**").permitAll()
+                        // 개발용 토큰 발급
+                        .requestMatchers("/api/dev/**").permitAll()
                         // Swagger
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         // Actuator

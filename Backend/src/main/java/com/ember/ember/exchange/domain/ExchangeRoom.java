@@ -66,4 +66,18 @@ public class ExchangeRoom extends BaseEntity {
     public enum RoomStatus {
         ACTIVE, EXPIRED, COMPLETED, TERMINATED, ARCHIVED, CHAT_CONNECTED, ENDED
     }
+
+    /** 매칭 성사 시 교환일기 방 생성 */
+    public static ExchangeRoom create(User userA, User userB, Matching matching) {
+        ExchangeRoom room = new ExchangeRoom();
+        room.userA = userA;
+        room.userB = userB;
+        room.matching = matching;
+        room.currentTurnUser = userA;
+        room.turnCount = 0;
+        room.roundCount = 1;
+        room.status = RoomStatus.ACTIVE;
+        room.deadlineAt = LocalDateTime.now().plusHours(48);
+        return room;
+    }
 }

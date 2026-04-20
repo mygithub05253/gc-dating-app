@@ -240,9 +240,28 @@ public class DiaryService {
                 .detail("{\"wordCount\":" + request.content().length() + "}")
                 .build());
 
-        log.info("일기 수정 완료: userId={}, diaryId={}", userId, diaryId);
+        // AI 재분석 MQ 이벤트 발행 (OutboxEvent → OutboxRelay가 RabbitMQ로 릴레이)
+        diary.resetAnalysisStatus(); // analysisStatus = PENDING
+        String messageId = UUID.randomUUID().toString();
+        String publishedAt = ZonedDateTime.now(KST).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
-        // TODO: AI 재분석 MQ 이벤트 발행
+        DiaryAnalyzeRequestedEvent analyzeEvent = new DiaryAnalyzeRequestedEvent(
+                messageId,
+                DiaryAnalyzeRequestedEvent.VERSION,
+                diary.getId(),
+                userId,
+                request.content(),
+                publishedAt,
+                null
+        );
+
+        String payload = serializeToJson(analyzeEvent);
+        OutboxEvent outboxEvent = OutboxEvent.of("DIARY", diary.getId(),
+                "DIARY_ANALYZE_REQUESTED", payload);
+        outboxEventRepository.save(outboxEvent);
+
+        log.info("[DiaryService] 일기 수정 완료 + AI 재분석 요청 — diaryId={}, userId={}, outboxEventId={}",
+                diary.getId(), userId, outboxEvent.getId());
 
         return new DiaryUpdateResponse(
                 diary.getId(),

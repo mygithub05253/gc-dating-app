@@ -40,4 +40,20 @@ public class Matching extends BaseEntity {
     public enum MatchingStatus {
         PENDING, MATCHED, CANCELLED, EXPIRED
     }
+
+    /** 매칭 요청 생성 (PENDING) */
+    public static Matching create(User fromUser, User toUser, Diary diary) {
+        Matching matching = new Matching();
+        matching.fromUser = fromUser;
+        matching.toUser = toUser;
+        matching.diary = diary;
+        matching.status = MatchingStatus.PENDING;
+        return matching;
+    }
+
+    /** 매칭 성사 처리 */
+    public void markMatched() {
+        this.status = MatchingStatus.MATCHED;
+        this.matchedAt = LocalDateTime.now();
+    }
 }

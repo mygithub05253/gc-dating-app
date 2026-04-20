@@ -68,7 +68,7 @@ public class ExchangeReportService {
      * @param event 교환방 완주 도메인 이벤트
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    @Transactional
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void onExchangeRoomCompleted(ExchangeRoomCompletedEvent event) {
         Long roomId = event.roomId();
         Long userAId = event.userAId();

@@ -98,6 +98,11 @@ public class Diary extends BaseEntity {
         this.analysisStatus = AnalysisStatus.SKIPPED;
     }
 
+    /** AI 재분석을 위한 상태 초기화 (수정 시 사용) */
+    public void resetAnalysisStatus() {
+        this.analysisStatus = AnalysisStatus.PENDING;
+    }
+
     public enum DiaryVisibility {
         /** 본인만 열람 */
         PRIVATE,
