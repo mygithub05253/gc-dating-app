@@ -176,11 +176,14 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r bg-card">
-      {/* Logo */}
-      <div className="flex h-16 items-center border-b px-6">
-        <Link href="/admin/dashboard" className="flex items-center space-x-2">
-          <span className="text-xl font-bold text-primary">Ember Admin</span>
+    <aside className="fixed left-0 top-0 z-40 flex h-screen w-64 flex-col border-r border-border bg-card">
+      {/* Logo — Ember Signal v1.0: Instrument Serif 브랜드 타입 */}
+      <div className="flex h-16 items-center border-b border-border px-6">
+        <Link href="/admin/dashboard" className="flex items-baseline gap-2">
+          <span className="font-serif text-2xl italic text-primary leading-none">Ember</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Admin
+          </span>
         </Link>
       </div>
 
@@ -200,19 +203,25 @@ export default function Sidebar() {
           return (
             <div key={item.href}>
               {hasSubItems ? (
-                // With submenu
+                // With submenu — active parent: 좌측 orange 막대 + accent 배경
                 <>
                   <button
                     onClick={() => toggleExpand(item.href)}
                     className={cn(
-                      'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                      'relative flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors duration-short',
                       isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                        ? 'bg-accent/60 text-foreground'
+                        : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground',
                     )}
                   >
+                    {isActive && (
+                      <span
+                        aria-hidden
+                        className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-primary"
+                      />
+                    )}
                     <div className="flex items-center gap-3">
-                      <Icon className="h-5 w-5" />
+                      <Icon className={cn('h-5 w-5', isActive && 'text-primary')} />
                       {item.title}
                     </div>
                     {expanded ? (
@@ -223,7 +232,7 @@ export default function Sidebar() {
                   </button>
 
                   {expanded && (
-                    <div className="ml-4 mt-1 space-y-1 border-l pl-4">
+                    <div className="ml-5 mt-1 space-y-0.5 border-l border-border pl-3">
                       {item.subItems!.map((subItem) => {
                         const isSubActive = pathname === subItem.href;
                         return (
@@ -231,10 +240,10 @@ export default function Sidebar() {
                             key={subItem.href}
                             href={subItem.href}
                             className={cn(
-                              'block rounded-lg px-3 py-2 text-sm transition-colors',
+                              'block rounded-sm px-3 py-1.5 text-sm transition-colors duration-short',
                               isSubActive
-                                ? 'bg-primary text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                ? 'bg-primary/10 font-medium text-primary'
+                                : 'text-muted-foreground hover:bg-accent/40 hover:text-foreground',
                             )}
                           >
                             {subItem.title}
@@ -245,17 +254,23 @@ export default function Sidebar() {
                   )}
                 </>
               ) : (
-                // Without submenu
+                // Without submenu — active: 좌측 orange 막대 + accent 배경
                 <Link
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    'relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-short',
                     isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                      ? 'bg-accent/60 text-foreground'
+                      : 'text-muted-foreground hover:bg-accent/30 hover:text-foreground',
                   )}
                 >
-                  <Icon className="h-5 w-5" />
+                  {isActive && (
+                    <span
+                      aria-hidden
+                      className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-primary"
+                    />
+                  )}
+                  <Icon className={cn('h-5 w-5', isActive && 'text-primary')} />
                   {item.title}
                 </Link>
               )}

@@ -2,50 +2,108 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Pretendard Variable — 한국어 제품 사실상 표준 (Inter 완전 대체) */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css');
+
+/* ───────────────────────────────────────────────
+   Ember Signal Design Tokens
+   - /design-consultation v1.0.0 · 2026-04-20
+   - warm stone base + ember orange primary
+   - see Frontend/admin/DESIGN.md
+   ─────────────────────────────────────────────── */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Surface */
+    --background: 60 9% 98%;          /* stone-50 warm */
+    --foreground: 20 14% 10%;         /* stone-900 warm ink */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 20 14% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    --popover-foreground: 20 14% 10%;
+
+    /* Ember primary — orange-700 (대비 확보) */
+    --primary: 17 88% 40%;
+    --primary-foreground: 60 9% 98%;
+
+    /* Secondary — stone-100 */
+    --secondary: 24 10% 95%;
+    --secondary-foreground: 20 14% 10%;
+
+    /* Muted */
+    --muted: 24 10% 95%;
+    --muted-foreground: 24 6% 45%;
+
+    /* Accent — orange-100 은은한 하이라이트 */
+    --accent: 30 100% 94%;
+    --accent-foreground: 17 88% 25%;
+
+    /* Destructive — red-600 (ember와 분리) */
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 60 9% 98%;
+
+    /* Semantic */
+    --success: 142 71% 36%;
+    --success-foreground: 60 9% 98%;
+    --warning: 38 92% 50%;            /* amber-500 (primary와 분리) */
+    --warning-foreground: 20 14% 10%;
+    --info: 199 89% 48%;              /* sky-500 */
+    --info-foreground: 60 9% 98%;
+
+    /* Border / Input / Ring */
+    --border: 24 6% 90%;
+    --input: 24 6% 90%;
+    --ring: 17 88% 40%;
+
+    /* Radius 계층 (AI slop 방지) */
+    --radius-sm: 0.25rem;  /* 4px — Badge, Input */
+    --radius-md: 0.5rem;   /* 8px — Button, Card */
+    --radius-lg: 0.75rem;  /* 12px — Modal, Popover */
+    --radius-xl: 1rem;     /* 16px — KPI Hero Card */
+    --radius: var(--radius-md); /* 기본 */
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    /* Surface — warm black (stone-950) */
+    --background: 20 14% 4%;
+    --foreground: 60 9% 98%;
+    --card: 20 14% 7%;
+    --card-foreground: 60 9% 98%;
+    --popover: 20 14% 7%;
+    --popover-foreground: 60 9% 98%;
+
+    /* Ember primary — orange-500 (다크에 밝게) */
+    --primary: 17 88% 55%;
+    --primary-foreground: 20 14% 4%;
+
+    /* Secondary — stone-800 */
+    --secondary: 20 10% 15%;
+    --secondary-foreground: 60 9% 98%;
+
+    /* Muted */
+    --muted: 20 10% 15%;
+    --muted-foreground: 24 5% 64%;
+
+    /* Accent — stone-700 warm */
+    --accent: 20 10% 20%;
+    --accent-foreground: 30 100% 85%;
+
+    /* Destructive */
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 60 9% 98%;
+
+    /* Semantic (다크 보정) */
+    --success: 142 71% 45%;
+    --success-foreground: 60 9% 98%;
+    --warning: 38 92% 60%;
+    --warning-foreground: 20 14% 4%;
+    --info: 199 89% 55%;
+    --info-foreground: 60 9% 98%;
+
+    /* Border / Input / Ring */
+    --border: 20 10% 15%;
+    --input: 20 10% 15%;
+    --ring: 17 88% 55%;
   }
 }
 
@@ -53,7 +111,73 @@
   * {
     @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
+  html {
+    font-feature-settings: 'ss06' on, 'cv11' on; /* Pretendard 한글 개선 feature */
   }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
+      system-ui, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+  }
+  /* 숫자 기본 등간격 — 테이블·KPI 정렬 */
+  table, .tabular, [data-tabular='true'] {
+    font-variant-numeric: tabular-nums;
+  }
+  /* 포커스 링 — Ember 브랜드 */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+/* ───────────────────────────────────────────────
+   Utility classes — 공통 프리셋
+   ─────────────────────────────────────────────── */
+
+@layer components {
+  /* KPI 큰 숫자 — Instrument Serif (AI slop 제거 장치) */
+  .kpi-number {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  /* Hero 타이포 */
+  .hero-display {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+  /* 데이터 모노 */
+  .font-mono-data {
+    font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* 다크 모드에서 그림자 약화 → 테두리로 분리감 대체 */
+.dark .shadow-md {
+  box-shadow: 0 0 0 1px hsl(var(--border));
+}
+.dark .shadow-lg {
+  box-shadow:
+    0 0 0 1px hsl(var(--border)),
+    0 10px 20px -10px rgba(0, 0, 0, 0.6);
+}
+
+/* scrollbar 브랜드 톤 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
 }

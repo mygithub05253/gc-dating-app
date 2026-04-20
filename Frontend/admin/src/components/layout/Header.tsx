@@ -6,9 +6,9 @@ import { Bell, Search, AlertTriangle, CheckCircle, Info, Clock, X } from 'lucide
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/utils/format';
+import ThemeToggle from '@/components/layout/ThemeToggle';
 
 // Mock 알림 데이터
 const MOCK_NOTIFICATIONS = [
@@ -50,11 +50,12 @@ const MOCK_NOTIFICATIONS = [
   },
 ];
 
+// Ember Signal v1.0 — semantic 토큰 기반 (다크모드 호환)
 const TYPE_ICONS: Record<string, React.ReactNode> = {
-  URGENT: <AlertTriangle className="h-4 w-4 text-red-500" />,
-  WARNING: <AlertTriangle className="h-4 w-4 text-yellow-500" />,
-  INFO: <Info className="h-4 w-4 text-blue-500" />,
-  SUCCESS: <CheckCircle className="h-4 w-4 text-green-500" />,
+  URGENT: <AlertTriangle className="h-4 w-4 text-destructive" />,
+  WARNING: <AlertTriangle className="h-4 w-4 text-warning" />,
+  INFO: <Info className="h-4 w-4 text-info" />,
+  SUCCESS: <CheckCircle className="h-4 w-4 text-success" />,
 };
 
 export default function Header() {
@@ -102,7 +103,10 @@ export default function Header() {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        {/* Theme Toggle (Ember Signal v1.0) */}
+        <ThemeToggle />
+
         {/* Notification Center */}
         <div className="relative">
           <Button
@@ -152,7 +156,7 @@ export default function Header() {
                     notifications.map(notification => (
                       <div
                         key={notification.id}
-                        className={`relative border-b p-4 hover:bg-muted/50 ${!notification.isRead ? 'bg-blue-50/50' : ''}`}
+                        className={`relative border-b p-4 hover:bg-muted/50 ${!notification.isRead ? 'bg-accent/40' : ''}`}
                       >
                         <Link
                           href={notification.link}
@@ -171,7 +175,7 @@ export default function Header() {
                                 {notification.title}
                               </p>
                               {!notification.isRead && (
-                                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                                <span className="h-2 w-2 rounded-full bg-primary" />
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground line-clamp-1">
