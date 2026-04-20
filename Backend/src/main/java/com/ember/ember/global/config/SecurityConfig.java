@@ -35,6 +35,9 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // Prometheus 스크레이핑 엔드포인트 — 내부망 전용 (prod에서는 네트워크 정책으로 추가 제한)
+                        .requestMatchers("/actuator/prometheus").permitAll()
+                        .requestMatchers("/actuator/metrics/**").permitAll()
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
                 );

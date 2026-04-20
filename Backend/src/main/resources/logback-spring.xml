@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ember 백엔드 Logback 설정 (M7 관측성)
+
+  프로파일별 인코더 전략:
+    - prod    : LogstashEncoder (JSON) — ELK / Loki 수집에 적합
+    - local / dev / 기타 : 패턴 인코더 (사람이 읽기 좋은 출력)
+
+  MDC 필드 (LogstashEncoder가 자동으로 JSON 필드로 포함):
+    - requestId   : RequestTraceFilter에서 주입 (X-Request-ID 헤더)
+    - traceId     : Micrometer Tracing 자동 주입
+    - spanId      : Micrometer Tracing 자동 주입
+    - outboxEventId : OutboxRelay.processEvent 에서 주입
+    - eventType   : OutboxRelay.processEvent 에서 주입
+    - messageId   : OutboxRelay.processDiaryAnalyzeRequested 등에서 주입
+-->
+<configuration>
+
+  <!-- ── 공통 속성 ────────────────────────────────────────────────────────── -->
+  <springProperty scope="context" name="appName"
+      source="management.metrics.tags.application"
+      defaultValue="ember-backend"/>
+
+  <!-- ── prod 프로파일: Logstash JSON 인코더 ─────────────────────────────── -->
+  <springProfile name="prod">
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <!-- 앱 이름을 JSON 필드로 추가 -->
+        <customFields>{"app":"${appName}"}</customFields>
+        <!-- MDC 필드를 최상위 JSON 필드로 승격 -->
+        <includeMdcKeyName>requestId</includeMdcKeyName>
+        <includeMdcKeyName>traceId</includeMdcKeyName>
+        <includeMdcKeyName>spanId</includeMdcKeyName>
+        <includeMdcKeyName>outboxEventId</includeMdcKeyName>
+        <includeMdcKeyName>eventType</includeMdcKeyName>
+        <includeMdcKeyName>messageId</includeMdcKeyName>
+        <!-- 타임스탬프 필드명 통일 -->
+        <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSS'+09:00'</timestampPattern>
+        <!-- 스택트레이스를 단일 JSON 필드로 직렬화 -->
+        <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+          <maxDepthPerCause>10</maxDepthPerCause>
+          <maxLength>8192</maxLength>
+          <rootCauseFirst>true</rootCauseFirst>
+        </throwableConverter>
+      </encoder>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="STDOUT"/>
+    </root>
+  </springProfile>
+
+  <!-- ── local / dev 프로파일: 사람이 읽기 좋은 패턴 인코더 ──────────────── -->
+  <springProfile name="local,dev">
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <!-- traceId/spanId: Micrometer Tracing이 MDC에 자동 주입하면 표시 -->
+        <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level [%X{traceId:--}/%X{spanId:--}] %logger{36} - %msg%n</pattern>
+        <charset>UTF-8</charset>
+      </encoder>
+    </appender>
+
+    <!-- SQL 로그는 DEBUG 레벨에서만 표시 (개발 편의) -->
+    <logger name="org.hibernate.SQL" level="DEBUG"/>
+    <logger name="org.hibernate.orm.jdbc.bind" level="TRACE"/>
+
+    <root level="DEBUG">
+      <appender-ref ref="STDOUT"/>
+    </root>
+  </springProfile>
+
+  <!-- ── 기타 프로파일(미지정): 기본 패턴 인코더 ────────────────────────── -->
+  <springProfile name="!prod,!local,!dev">
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        <charset>UTF-8</charset>
+      </encoder>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="STDOUT"/>
+    </root>
+  </springProfile>
+
+</configuration>

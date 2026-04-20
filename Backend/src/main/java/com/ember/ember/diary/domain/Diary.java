@@ -7,6 +7,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "diaries",
@@ -40,16 +41,83 @@ public class Diary extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private DiaryStatus status = DiaryStatus.SUBMITTED;
 
+    // AI 분석 파이프라인 상태 (사용자 워크플로우 status와 분리)
+    @Column(name = "analysis_status", nullable = false, length = 15)
+    @Enumerated(EnumType.STRING)
+    private AnalysisStatus analysisStatus = AnalysisStatus.PENDING;
+
     @Column(length = 100)
     private String summary;
 
     @Column(length = 20)
     private String category;
 
+    @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    private DiaryVisibility visibility = DiaryVisibility.PRIVATE;
+
     @Column(name = "is_exchanged", nullable = false)
     private Boolean isExchanged = false;
 
+    // -------------------------------------------------------------------------
+    // 팩토리 메서드
+    // -------------------------------------------------------------------------
+
+    /**
+     * 일기 생성 팩토리 메서드.
+     * analysisStatus 기본값: PENDING
+     */
+    public static Diary create(User user, String content, DiaryVisibility visibility) {
+        Diary diary = new Diary();
+        diary.user = user;
+        diary.content = content;
+        diary.visibility = visibility;
+        diary.date = LocalDate.now();
+        diary.analysisStatus = AnalysisStatus.PENDING;
+        return diary;
+    }
+
+    // -------------------------------------------------------------------------
+    // 도메인 상태 변경 메서드
+    // -------------------------------------------------------------------------
+
+    /** AI 분석 완료 처리 (summary, category 업데이트 포함) */
+    public void completeAnalysis(String summary, String category) {
+        this.analysisStatus = AnalysisStatus.COMPLETED;
+        this.summary = summary;
+        this.category = category;
+    }
+
+    /** AI 분석 실패 처리 */
+    public void failAnalysis() {
+        this.analysisStatus = AnalysisStatus.FAILED;
+    }
+
+    /** AI 분석 동의 미획득으로 건너뜀 처리 */
+    public void skipAnalysis() {
+        this.analysisStatus = AnalysisStatus.SKIPPED;
+    }
+
+    public enum DiaryVisibility {
+        /** 본인만 열람 */
+        PRIVATE,
+        /** 매칭 상대(교환 파트너)도 열람 가능 */
+        EXCHANGE_ONLY
+    }
+
     public enum DiaryStatus {
         SUBMITTED, ANALYZING, ANALYZED
+    }
+
+    /**
+     * AI 분석 파이프라인 처리 상태
+     * PENDING: 분석 대기 (기본값)
+     * PROCESSING: FastAPI에서 분석 중
+     * COMPLETED: 분석 완료, diary_keywords 저장됨
+     * FAILED: 분석 실패 (DLQ 소진 후)
+     * SKIPPED: 동의 미획득 또는 조건 미충족으로 분석 생략
+     */
+    public enum AnalysisStatus {
+        PENDING, PROCESSING, COMPLETED, FAILED, SKIPPED
     }
 }

@@ -1,0 +1,4 @@
+-- V1: 베이스라인 마이그레이션
+-- Flyway 도입 전 Hibernate ddl-auto:update로 생성된 기존 스키마를 베이스라인으로 표시.
+-- baseline-on-migrate: true 설정으로 이 파일은 실제 실행되지 않고 체크섬만 등록됨.
+-- 실제 테이블 DDL은 Hibernate가 이미 생성했으므로 이 파일은 빈 상태로 유지.

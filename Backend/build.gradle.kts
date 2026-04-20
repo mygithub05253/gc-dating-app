@@ -52,9 +52,25 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
     runtimeOnly("com.h2database:h2")
 
+    // Flyway (DB 스키마 마이그레이션)
+    implementation("org.flywaydb:flyway-core")
+    implementation("org.flywaydb:flyway-database-postgresql")
+
     // Lombok
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
+
+    // ── 관측성 (M7) ─────────────────────────────────────────────────────────────
+    // Spring Actuator + Prometheus 메트릭 노출
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
+
+    // Micrometer → OpenTelemetry 트레이싱 브리지 (Spring Boot BOM 버전 자동 관리)
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
+
+    // 구조화 JSON 로깅 (Logstash 인코더 — prod 프로파일)
+    implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")

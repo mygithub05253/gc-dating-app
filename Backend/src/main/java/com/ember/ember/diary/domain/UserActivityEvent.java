@@ -35,4 +35,25 @@ public class UserActivityEvent {
 
     @Column(name = "occurred_at", nullable = false)
     private LocalDateTime occurredAt;
+
+    /**
+     * 활동 이벤트 생성 팩토리 메서드.
+     *
+     * @param user       이벤트 발생 사용자
+     * @param eventType  이벤트 유형 (예: AI_ANALYSIS_COMPLETED, AI_ANALYSIS_FAILED)
+     * @param targetType 대상 엔티티 유형 (예: DIARY)
+     * @param targetId   대상 엔티티 PK
+     * @param detail     추가 상세 정보 (JSON 또는 plain text)
+     */
+    public static UserActivityEvent of(User user, String eventType,
+                                       String targetType, Long targetId, String detail) {
+        UserActivityEvent event = new UserActivityEvent();
+        event.user = user;
+        event.eventType = eventType;
+        event.targetType = targetType;
+        event.targetId = targetId;
+        event.detail = detail;
+        event.occurredAt = LocalDateTime.now();
+        return event;
+    }
 }

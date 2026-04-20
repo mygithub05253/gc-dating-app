@@ -23,8 +23,51 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+  # Flyway: DB 스키마 마이그레이션
+  flyway:
+    enabled: true
+    # 기존 Hibernate ddl-auto:update로 생성된 테이블을 베이스라인으로 처리
+    baseline-on-migrate: true
+    baseline-version: 1
+    locations: classpath:db/migration
+
+  # RabbitMQ Listener 공통 설정 (프로파일별 host/port는 아래에서 오버라이드)
+  rabbitmq:
+    listener:
+      simple:
+        prefetch: 4
+        concurrency: 2
+        default-requeue-rejected: false
+
 server:
   port: 8080
+
+# ── 관측성 공통 설정 (M7) ────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+    prometheus:
+      access: read_only
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        ai.diary.analyze.duration: true
+        ai.matching.calculate.duration: true
+    tags:
+      application: ember-backend
+      env: ${SPRING_PROFILES_ACTIVE:local}
+  tracing:
+    sampling:
+      probability: 0.1
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://jaeger:4318/v1/traces}
 
 app:
   cors:
@@ -86,6 +129,12 @@ app:
       - http://localhost:3000
       - http://localhost:8080
       - http://10.0.2.2:8080
+
+# dev 프로파일: AI 서버 URL / 내부 API 키 (환경변수 없을 시 기본값)
+ai:
+  service:
+    url: ${AI_SERVICE_URL:http://localhost:8000}
+  internal-key: ${INTERNAL_API_KEY:local-dev-key}
 
 springdoc:
   swagger-ui:

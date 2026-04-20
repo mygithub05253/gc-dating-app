@@ -33,4 +33,16 @@ public class DiaryKeyword extends BaseEntity {
     public enum TagType {
         EMOTION, LIFESTYLE, RELATIONSHIP_STYLE, TONE
     }
+
+    /**
+     * AI 분석 태그 결과로부터 DiaryKeyword 생성 팩토리 메서드.
+     */
+    public static DiaryKeyword of(Diary diary, TagType tagType, String label, java.math.BigDecimal score) {
+        DiaryKeyword keyword = new DiaryKeyword();
+        keyword.diary = diary;
+        keyword.tagType = tagType;
+        keyword.label = label;
+        keyword.score = score;
+        return keyword;
+    }
 }
