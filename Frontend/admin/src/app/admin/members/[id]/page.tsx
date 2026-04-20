@@ -23,8 +23,25 @@ import {
   Activity,
   Shield,
   Link2,
+  Unlock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+// v2.1 신규: UNBLOCK 사유 카테고리 (관리자 기능명세서 9.x)
+type UnblockReasonCategory =
+  | 'FALSE_REPORT'
+  | 'APPEAL_ACCEPTED'
+  | 'SYSTEM_ERROR'
+  | 'POLICY_CHANGE'
+  | 'OTHER';
+
+const UNBLOCK_REASON_LABELS: Record<UnblockReasonCategory, string> = {
+  FALSE_REPORT: '허위 신고 확인',
+  APPEAL_ACCEPTED: '이의 제기 수용',
+  SYSTEM_ERROR: '시스템 오류로 인한 오제재',
+  POLICY_CHANGE: '정책 변경',
+  OTHER: '기타',
+};
 
 // ---- 탭 정의 ----
 const TABS = [
@@ -61,6 +78,37 @@ const MOCK_USERS: Record<string, any> = {
     reports: [],
     socialLogins: [
       { provider: 'KAKAO', connectedAt: '2024-01-15T10:30:00', email: 'minji@kakao.com' },
+    ],
+  },
+  '3': {
+    id: 3,
+    nickname: '푸른바다',
+    gender: 'MALE',
+    age: 31,
+    status: 'BANNED',
+    createdAt: '2023-11-05T09:00:00',
+    lastActivityAt: '2024-03-20T22:30:00',
+    diaryCount: 12,
+    matchCount: 2,
+    exchangeCompletionRate: 20.0,
+    matchHistory: [],
+    sanctions: [
+      {
+        id: 2,
+        type: 'SUSPEND_PERMANENT',
+        reason: '반복 성적 콘텐츠 게재',
+        memo: '3회 이상 성적 콘텐츠 신고 누적으로 영구 정지 처분 (SUPER_ADMIN 결재).',
+        createdAt: '2024-03-15T10:00:00',
+        adminNickname: '박슈퍼',
+      },
+    ],
+    reports: [
+      { id: 10, reason: 'SEXUAL', status: 'RESOLVED', createdAt: '2024-03-14T10:00:00', reporterNickname: '익명유저A' },
+      { id: 11, reason: 'SEXUAL', status: 'RESOLVED', createdAt: '2024-03-12T08:00:00', reporterNickname: '익명유저B' },
+      { id: 12, reason: 'SEXUAL', status: 'RESOLVED', createdAt: '2024-03-10T19:00:00', reporterNickname: '익명유저C' },
+    ],
+    socialLogins: [
+      { provider: 'KAKAO', connectedAt: '2023-11-05T09:00:00', email: 'blue@kakao.com' },
     ],
   },
   '2': {
@@ -128,6 +176,11 @@ export default function UserDetailPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [sanctionMemo, setSanctionMemo] = useState('');
   const [sanctionMemoError, setSanctionMemoError] = useState('');
+  // v2.1 신규: UNBLOCK (제재 해제) 상태
+  const [unblockOpen, setUnblockOpen] = useState(false);
+  const [unblockCategory, setUnblockCategory] = useState<UnblockReasonCategory>('APPEAL_ACCEPTED');
+  const [unblockReason, setUnblockReason] = useState('');
+  const [unblockError, setUnblockError] = useState('');
 
   const userId = params.id as string;
   const user = MOCK_USERS[userId] || MOCK_USERS['1'];
@@ -173,6 +226,23 @@ export default function UserDetailPage() {
     setIsProcessing(true);
     await new Promise((r) => setTimeout(r, 500));
     toast.success('정지가 해제되었습니다.');
+    setIsProcessing(false);
+  };
+
+  // v2.1: 제재 해제(UNBLOCK) — BANNED 상태, SUPER_ADMIN 전용, 사유 카테고리 + 10자 이상 사유
+  const handleUnblock = async () => {
+    if (unblockReason.trim().length < 10) {
+      setUnblockError('해제 사유는 최소 10자 이상 입력해야 합니다.');
+      return;
+    }
+    setUnblockError('');
+    setIsProcessing(true);
+    await new Promise((r) => setTimeout(r, 500));
+    toast.success(
+      `제재가 해제되었습니다. (${UNBLOCK_REASON_LABELS[unblockCategory]}) — 사용자는 다음 로그인 시 환영 모달을 보게 됩니다.`,
+    );
+    setUnblockOpen(false);
+    setUnblockReason('');
     setIsProcessing(false);
   };
 
@@ -396,9 +466,101 @@ export default function UserDetailPage() {
                   </Button>
                 )}
                 {user.status === 'BANNED' && (
-                  <p className="text-sm text-muted-foreground">영구 정지 상태입니다.</p>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-sm text-muted-foreground">영구 정지 상태입니다.</p>
+                    {/* v2.1 신규: 제재 해제(UNBLOCK) — SUPER_ADMIN 전용 */}
+                    {hasPermission('SUPER_ADMIN') ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => setUnblockOpen((v) => !v)}
+                        disabled={isProcessing}
+                        className="border-green-300 text-green-700 hover:bg-green-50"
+                      >
+                        <Unlock className="mr-2 h-4 w-4" />
+                        제재 해제 (UNBLOCK)
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        제재 해제는 SUPER_ADMIN 권한이 필요합니다.
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
+
+              {/* v2.1 신규: UNBLOCK 모달 (BANNED + SUPER_ADMIN 한정) */}
+              {user.status === 'BANNED' && hasPermission('SUPER_ADMIN') && unblockOpen && (
+                <div className="mt-4 rounded-lg border border-green-200 bg-green-50/50 p-4">
+                  <div className="flex items-center gap-2 mb-3 text-green-800">
+                    <Unlock className="h-4 w-4" />
+                    <span className="font-medium">제재 해제</span>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">해제 사유 카테고리</label>
+                      <select
+                        value={unblockCategory}
+                        onChange={(e) =>
+                          setUnblockCategory(e.target.value as UnblockReasonCategory)
+                        }
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      >
+                        {Object.entries(UNBLOCK_REASON_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">
+                        해제 사유 상세 (최소 10자)
+                      </label>
+                      <textarea
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[80px]"
+                        placeholder="해제 사유를 상세히 입력하세요 (이력으로 영구 보관됩니다)"
+                        value={unblockReason}
+                        onChange={(e) => {
+                          setUnblockReason(e.target.value);
+                          if (e.target.value.length >= 10) {
+                            setUnblockError('');
+                          }
+                        }}
+                      />
+                      {unblockError && (
+                        <p className="mt-1 text-sm text-red-500">{unblockError}</p>
+                      )}
+                      {!unblockError && unblockReason.length > 0 && unblockReason.length < 10 && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {10 - unblockReason.length}자 더 입력해주세요
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="default"
+                        onClick={handleUnblock}
+                        disabled={isProcessing || unblockReason.length < 10}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        해제 확정
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setUnblockOpen(false);
+                          setUnblockReason('');
+                          setUnblockError('');
+                        }}
+                        disabled={isProcessing}
+                      >
+                        취소
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
