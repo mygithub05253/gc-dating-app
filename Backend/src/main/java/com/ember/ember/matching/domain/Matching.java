@@ -38,6 +38,6 @@ public class Matching extends BaseEntity {
     private LocalDateTime matchedAt;
 
     public enum MatchingStatus {
-        PENDING, MATCHED, CANCELLED
+        PENDING, MATCHED, CANCELLED, EXPIRED
     }
 }

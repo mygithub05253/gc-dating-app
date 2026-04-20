@@ -28,4 +28,16 @@ public class FcmToken extends BaseEntity {
     public enum DeviceType {
         AOS, IOS
     }
+
+    @Builder
+    public FcmToken(User user, String fcmToken, DeviceType deviceType) {
+        this.user = user;
+        this.fcmToken = fcmToken;
+        this.deviceType = deviceType;
+    }
+
+    /** FCM 토큰 갱신 */
+    public void updateToken(String fcmToken) {
+        this.fcmToken = fcmToken;
+    }
 }

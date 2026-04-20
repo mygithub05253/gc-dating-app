@@ -64,6 +64,6 @@ public class ExchangeRoom extends BaseEntity {
     }
 
     public enum RoomStatus {
-        ACTIVE, EXPIRED, COMPLETED, TERMINATED, ARCHIVED
+        ACTIVE, EXPIRED, COMPLETED, TERMINATED, ARCHIVED, CHAT_CONNECTED, ENDED
     }
 }

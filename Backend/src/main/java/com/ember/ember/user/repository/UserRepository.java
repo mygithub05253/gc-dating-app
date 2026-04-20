@@ -8,11 +8,16 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
- * 사용자 Repository
+ * 사용자 Repository - main + feature 메서드 합산
  */
 public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByNickname(String nickname);
+
+    boolean existsByNickname(String nickname);
 
     /**
      * 매칭 후보 필터 쿼리 (M4 초기 구현).
@@ -28,14 +33,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * TODO(M5): 이미 매칭 진행 중인 사용자 제외 (exchange_rooms 테이블 기준)
      * TODO(M5): MatchingPass(패스한 사용자) 제외 로직 추가
      * TODO(M6): 후보 필터링 정교화 (지역 선호, 활동 점수 기반 우선순위)
-     *
-     * @param excludeUserId   기준 사용자 ID (자기 자신 제외)
-     * @param gender          기준 사용자 성별 (반대 성별 조회)
-     * @param minBirthDate    연령 상한 (±5세 min)
-     * @param maxBirthDate    연령 하한 (±5세 max)
-     * @param activeThreshold 마지막 로그인 기준 시각 (7일 전)
-     * @param limit           최대 후보 수 (50)
-     * @return 후보 사용자 ID 목록
      */
     @Query("""
             SELECT u.id FROM User u

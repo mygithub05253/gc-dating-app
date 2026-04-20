@@ -3,7 +3,7 @@ package com.ember.ember.messaging.outbox;
 import com.ember.ember.aireport.repository.ExchangeReportRepository;
 import com.ember.ember.consent.service.AiConsentService;
 import com.ember.ember.diary.repository.DiaryRepository;
-import com.ember.ember.global.system.domain.AiConsentLog.ConsentType;
+// 결정 4: ConsentType Enum 제거 — String 기반 사용
 import com.ember.ember.messaging.event.DiaryAnalyzeRequestedEvent;
 import com.ember.ember.messaging.event.ExchangeReportRequestedEvent;
 import com.ember.ember.messaging.event.LifestyleAnalyzeRequestedEvent;
@@ -148,8 +148,8 @@ public class OutboxRelay {
         Long userBId   = requestEvent.userBId();
 
         // 2-party 동의 재검증 (AI_DATA_USAGE)
-        boolean consentA = aiConsentService.hasGrantedConsent(userAId, ConsentType.AI_DATA_USAGE);
-        boolean consentB = aiConsentService.hasGrantedConsent(userBId, ConsentType.AI_DATA_USAGE);
+        boolean consentA = aiConsentService.hasGrantedConsent(userAId, "AI_DATA_USAGE");
+        boolean consentB = aiConsentService.hasGrantedConsent(userBId, "AI_DATA_USAGE");
 
         if (!consentA || !consentB) {
             // 재검증 미동의: 리포트 상태를 CONSENT_REQUIRED로 복구
@@ -186,7 +186,7 @@ public class OutboxRelay {
 
         // AI_DATA_USAGE 동의 확인
         boolean hasConsent = aiConsentService.hasGrantedConsent(
-                userId, ConsentType.AI_DATA_USAGE);
+                userId, "AI_DATA_USAGE");
 
         if (!hasConsent) {
             event.markProcessed();
@@ -235,7 +235,7 @@ public class OutboxRelay {
         MDC.put("messageId", requestEvent.messageId());
 
         // AI 분석 동의 여부 확인
-        boolean hasConsent = aiConsentService.hasGrantedConsent(userId, ConsentType.AI_ANALYSIS);
+        boolean hasConsent = aiConsentService.hasGrantedConsent(userId, "AI_ANALYSIS");
 
         if (!hasConsent) {
             // 동의 미획득: analysisStatus=SKIPPED, 발행 생략

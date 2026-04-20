@@ -7,18 +7,12 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 /**
- * AI 동의 이력 엔티티
- * 사용자의 AI 분석 동의/철회 이력을 시계열로 기록.
- * 최신 동의 상태는 (user_id, consent_type, agreed_at DESC) 인덱스로 조회.
+ * AI 동의 이력 엔티티 - 결정 4: main 버전 유지
+ * acted_at 컬럼, action/consentType String 필드 사용.
+ * feature가 도입한 ConsentType/ConsentAction Enum 제거.
  */
 @Entity
-@Table(
-    name = "ai_consent_log",
-    indexes = {
-        // 최신 동의 상태 조회 최적화: OutboxRelay에서 동의 확인 시 사용
-        @Index(name = "idx_ai_consent_log_user_type_at", columnList = "user_id, consent_type, agreed_at DESC")
-    }
-)
+@Table(name = "ai_consent_log")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AiConsentLog {
@@ -31,43 +25,24 @@ public class AiConsentLog {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "consent_type", nullable = false, length = 20)
-    @Enumerated(EnumType.STRING)
-    private ConsentType consentType;
+    @Column(nullable = false, length = 15)
+    private String action;
 
-    @Column(nullable = false, length = 10)
-    @Enumerated(EnumType.STRING)
-    private ConsentAction action;
-
-    @Column(name = "agreed_at", nullable = false)
-    private LocalDateTime agreedAt;
+    @Column(name = "consent_type", nullable = false, length = 30)
+    private String consentType;
 
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
 
-    /**
-     * AI 동의 유형
-     * AI_ANALYSIS: 일기 AI 분석 동의
-     * AI_DATA_USAGE: AI 학습 데이터 활용 동의
-     */
-    public enum ConsentType {
-        AI_ANALYSIS, AI_DATA_USAGE
-    }
+    @Column(name = "acted_at", nullable = false)
+    private LocalDateTime actedAt;
 
-    /**
-     * 동의 액션 (ERD v1.2 기준: GRANTED/REVOKED)
-     */
-    public enum ConsentAction {
-        GRANTED, REVOKED
-    }
-
-    public static AiConsentLog of(User user, ConsentType consentType, ConsentAction action, String ipAddress) {
-        AiConsentLog log = new AiConsentLog();
-        log.user = user;
-        log.consentType = consentType;
-        log.action = action;
-        log.agreedAt = LocalDateTime.now();
-        log.ipAddress = ipAddress;
-        return log;
+    @Builder
+    public AiConsentLog(User user, String action, String consentType, String ipAddress) {
+        this.user = user;
+        this.action = action;
+        this.consentType = consentType;
+        this.ipAddress = ipAddress;
+        this.actedAt = LocalDateTime.now();
     }
 }

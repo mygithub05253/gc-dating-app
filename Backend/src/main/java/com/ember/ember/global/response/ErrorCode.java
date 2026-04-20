@@ -47,12 +47,13 @@ public enum ErrorCode {
 
     // ── 일기 (D) ──
     DIARY_DAILY_LIMIT("D001", HttpStatus.CONFLICT, "오늘 이미 일기를 작성했습니다."),
-    DIARY_CONTENT_LENGTH("D002", HttpStatus.BAD_REQUEST, "글자 수 제한(100~1,000자)에 맞지 않습니다."),
+    DIARY_CONTENT_LENGTH("D002", HttpStatus.BAD_REQUEST, "글자 수 제한(200~1,000자)에 맞지 않습니다."),
     TOPIC_NOT_FOUND("D003", HttpStatus.NOT_FOUND, "존재하지 않는 주제입니다."),
     DIARY_NOT_FOUND("D004", HttpStatus.NOT_FOUND, "존재하지 않는 일기입니다."),
     DIARY_UNAUTHORIZED("D005", HttpStatus.FORBIDDEN, "본인의 일기가 아닙니다."),
     DIARY_NOT_EDITABLE("D006", HttpStatus.BAD_REQUEST, "당일 작성한 일기만 수정 가능합니다."),
     DRAFT_NOT_FOUND("D007", HttpStatus.NOT_FOUND, "존재하지 않는 임시저장 일기입니다."),
+    DRAFT_LIMIT_EXCEEDED("D008", HttpStatus.BAD_REQUEST, "임시저장은 최대 3건까지 가능합니다."),
 
     // ── 매칭 (M) ──
     MATCHING_ALREADY_REQUESTED("M001", HttpStatus.CONFLICT, "이미 교환 신청한 사용자입니다."),

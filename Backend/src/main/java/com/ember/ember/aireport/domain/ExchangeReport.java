@@ -118,13 +118,6 @@ public class ExchangeReport extends BaseEntity {
     /**
      * FastAPI 리포트 분석 완료 처리.
      * PROCESSING → COMPLETED 전이, 모든 AI 결과 필드 저장.
-     *
-     * @param commonKeywords    공통 키워드 JSON 배열 문자열
-     * @param emotionSimilarity 감정 유사도
-     * @param lifestylePatterns 생활 패턴 JSON 배열 문자열
-     * @param writingTempA      userA 글쓰기 온도
-     * @param writingTempB      userB 글쓰기 온도
-     * @param aiDescription     AI 설명 텍스트
      */
     public void completeReport(
             String commonKeywords,

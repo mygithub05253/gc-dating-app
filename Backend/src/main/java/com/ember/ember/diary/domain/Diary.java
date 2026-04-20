@@ -106,7 +106,31 @@ public class Diary extends BaseEntity {
     }
 
     public enum DiaryStatus {
-        SUBMITTED, ANALYZING, ANALYZED
+        SUBMITTED, ANALYZING, ANALYZED, SKIPPED
+    }
+
+    /** 일기 생성 */
+    @Builder
+    public Diary(User user, String content, LocalDate date, WeeklyTopic topic) {
+        this.user = user;
+        this.content = content;
+        this.date = date;
+        this.topic = topic;
+        this.status = DiaryStatus.SUBMITTED;
+        this.isExchanged = false;
+    }
+
+    /** 일기 본문 수정 (당일만) */
+    public void updateContent(String content) {
+        this.content = content;
+        this.summary = null;
+        this.category = null;
+        this.status = DiaryStatus.SUBMITTED;
+    }
+
+    /** 수정 가능 여부 (당일 KST + 교환 미시작) */
+    public boolean isEditable() {
+        return this.date.equals(LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))) && !this.isExchanged;
     }
 
     /**

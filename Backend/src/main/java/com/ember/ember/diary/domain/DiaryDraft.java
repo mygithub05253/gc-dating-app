@@ -33,4 +33,22 @@ public class DiaryDraft extends BaseEntity {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "topic_id")
+    private com.ember.ember.topic.domain.WeeklyTopic topic;
+
+    /** 임시저장 생성 */
+    @Builder
+    public DiaryDraft(User user, String content, LocalDate savedDate, com.ember.ember.topic.domain.WeeklyTopic topic) {
+        this.user = user;
+        this.content = content;
+        this.savedDate = savedDate;
+        this.topic = topic;
+    }
+
+    /** 소프트 딜리트 */
+    public void softDelete() {
+        this.deletedAt = LocalDateTime.now();
+    }
 }

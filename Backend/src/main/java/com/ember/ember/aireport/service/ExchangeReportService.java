@@ -9,7 +9,7 @@ import com.ember.ember.exchange.domain.ExchangeRoom;
 import com.ember.ember.exchange.event.ExchangeRoomCompletedEvent;
 import com.ember.ember.exchange.repository.ExchangeDiaryRepository;
 import com.ember.ember.exchange.repository.ExchangeRoomRepository;
-import com.ember.ember.global.system.domain.AiConsentLog.ConsentType;
+// 결정 4: ConsentType Enum 제거 — String 기반 사용
 import com.ember.ember.messaging.event.ExchangeReportRequestedEvent;
 import com.ember.ember.messaging.event.ExchangeReportRequestedEvent.DiaryPayload;
 import com.ember.ember.messaging.outbox.entity.OutboxEvent;
@@ -91,8 +91,8 @@ public class ExchangeReportService {
                 });
 
         // 2. 2-party 동의 검증 (AI_DATA_USAGE)
-        boolean consentA = aiConsentService.hasGrantedConsent(userAId, ConsentType.AI_DATA_USAGE);
-        boolean consentB = aiConsentService.hasGrantedConsent(userBId, ConsentType.AI_DATA_USAGE);
+        boolean consentA = aiConsentService.hasGrantedConsent(userAId, "AI_DATA_USAGE");
+        boolean consentB = aiConsentService.hasGrantedConsent(userBId, "AI_DATA_USAGE");
 
         if (!consentA || !consentB) {
             // 미동의 처리: CONSENT_REQUIRED 상태로 저장

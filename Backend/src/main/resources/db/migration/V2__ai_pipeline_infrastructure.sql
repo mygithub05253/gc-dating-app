@@ -47,10 +47,10 @@ COMMENT ON COLUMN exchange_reports.status IS
 
 
 -- -----------------------------------------------------------------------------
--- 3. ai_consent_log: Enum 컬럼 재정의 (D-03, D-06)
--- 기존 action(VARCHAR), consent_type(VARCHAR) → 체크 제약으로 Enum 안전성 확보
+-- 3. ai_consent_log: 체크 제약으로 값 안전성 확보 (D-03, D-06)
+-- 결정 4: main 기준 유지 — acted_at 컬럼, action/consentType String 필드.
+--          feature의 agreed_at 컬럼 추가 제거.
 -- ERD v1.2 기준: action = GRANTED/REVOKED, consent_type = AI_ANALYSIS/AI_DATA_USAGE
--- agreed_at 컬럼 추가 (기존 acted_at과 병존 → 데이터 마이그레이션 후 제거 예정)
 -- -----------------------------------------------------------------------------
 
 -- 기존 action 값을 ERD v1.2 기준으로 정규화 (CONSENT→GRANTED, WITHDRAW→REVOKED)
@@ -66,22 +66,9 @@ ALTER TABLE ai_consent_log
     ADD CONSTRAINT IF NOT EXISTS chk_ai_consent_log_consent_type
         CHECK (consent_type IN ('AI_ANALYSIS', 'AI_DATA_USAGE'));
 
--- agreed_at 컬럼 추가 (Java Entity의 agreedAt 필드와 매핑)
-ALTER TABLE ai_consent_log
-    ADD COLUMN IF NOT EXISTS agreed_at TIMESTAMP;
-
--- 기존 acted_at 데이터를 agreed_at으로 복사
-UPDATE ai_consent_log
-SET agreed_at = acted_at
-WHERE agreed_at IS NULL AND acted_at IS NOT NULL;
-
--- agreed_at NOT NULL 제약 (데이터 복사 후 적용)
-ALTER TABLE ai_consent_log
-    ALTER COLUMN agreed_at SET NOT NULL;
-
--- 최신 동의 상태 조회 최적화 인덱스 (OutboxRelay에서 동의 확인 시 사용)
+-- 최신 동의 상태 조회 최적화 인덱스 (OutboxRelay에서 동의 확인 시 사용, acted_at 기준)
 CREATE INDEX IF NOT EXISTS idx_ai_consent_log_user_type_at
-    ON ai_consent_log (user_id, consent_type, agreed_at DESC);
+    ON ai_consent_log (user_id, consent_type, acted_at DESC);
 
 
 -- -----------------------------------------------------------------------------
