@@ -45,6 +45,6 @@ public class ExchangeReport extends BaseEntity {
     private LocalDateTime generatedAt;
 
     public enum ReportStatus {
-        PENDING, PROCESSING, COMPLETED, FAILED
+        PENDING, PROCESSING, COMPLETED, FAILED, CONSENT_REQUIRED
     }
 }

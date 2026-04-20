@@ -50,6 +50,6 @@ public class Diary extends BaseEntity {
     private Boolean isExchanged = false;
 
     public enum DiaryStatus {
-        SUBMITTED, ANALYZING, ANALYZED
+        SUBMITTED, ANALYZING, ANALYZED, SKIPPED
     }
 }

@@ -33,7 +33,7 @@ public class Couple extends BaseEntity {
 
     @Column(nullable = false, length = 15)
     @Enumerated(EnumType.STRING)
-    private CoupleStatus status = CoupleStatus.CONFIRMED;
+    private CoupleStatus status = CoupleStatus.ACTIVE;
 
     @Column(name = "confirmed_at", nullable = false)
     private LocalDateTime confirmedAt;
@@ -42,6 +42,6 @@ public class Couple extends BaseEntity {
     private LocalDateTime dissolvedAt;
 
     public enum CoupleStatus {
-        CONFIRMED, DISSOLVED
+        ACTIVE, DISSOLVED
     }
 }
