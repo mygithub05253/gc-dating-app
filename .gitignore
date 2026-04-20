@@ -42,3 +42,8 @@ nginx/certs/
 # Misc
 *.tmp
 *.swp
+
+# 문서/명세서 (협업 레포에 푸시하지 않음, 로컬 전용 + Obsidian Vault 동기화 운영)
+docs/
+**/docs/
+*.draft.md
