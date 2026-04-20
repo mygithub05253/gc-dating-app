@@ -35,4 +35,14 @@ public class UserActivityEvent {
 
     @Column(name = "occurred_at", nullable = false)
     private LocalDateTime occurredAt;
+
+    @Builder
+    public UserActivityEvent(User user, String eventType, String targetType, Long targetId, String detail) {
+        this.user = user;
+        this.eventType = eventType;
+        this.targetType = targetType;
+        this.targetId = targetId;
+        this.detail = detail;
+        this.occurredAt = LocalDateTime.now();
+    }
 }

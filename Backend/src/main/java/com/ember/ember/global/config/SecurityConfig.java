@@ -1,5 +1,6 @@
 package com.ember.ember.global.config;
 
+import com.ember.ember.global.security.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,6 +9,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -20,6 +22,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final CorsProperties corsProperties;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -28,16 +31,28 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 인증 불필요
+                        // 헬스체크
                         .requestMatchers("/api/health").permitAll()
-                        .requestMatchers("/api/v1/auth/**").permitAll()
+                        // 인증 API (인증 불필요)
+                        .requestMatchers("/api/auth/**").permitAll()
+                        // 관리자 인증 API
                         .requestMatchers("/api/admin/auth/**").permitAll()
+                        // 닉네임 생성 (인증 불필요)
+                        .requestMatchers("/api/users/nickname/generate").permitAll()
+                        // 키워드 목록 조회 (공개 API)
+                        .requestMatchers("/api/users/ideal-type/keyword-list").permitAll()
+                        // 앱 버전 체크 (인증 불필요)
+                        .requestMatchers("/api/system/version").permitAll()
+                        // WebSocket
                         .requestMatchers("/ws/**").permitAll()
+                        // Swagger
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // Actuator
                         .requestMatchers("/actuator/health").permitAll()
                         // 나머지는 인증 필요
                         .anyRequest().authenticated()
-                );
+                )
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -46,7 +61,6 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // application.yml에서 환경별 허용 origin 로드
         List<String> origins = corsProperties.getAllowedOrigins().stream()
                 .filter(o -> o != null && !o.isBlank())
                 .toList();

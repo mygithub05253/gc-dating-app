@@ -23,4 +23,10 @@ public class UserIdealKeyword extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "keyword_id", nullable = false)
     private Keyword keyword;
+
+    @Builder
+    public UserIdealKeyword(User user, Keyword keyword) {
+        this.user = user;
+        this.keyword = keyword;
+    }
 }

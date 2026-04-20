@@ -7,7 +7,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum ResponseCode {
 
-    OK("S000", "성공");
+    OK("200", "OK"),
+    CREATED("201", "CREATED");
 
     private final String code;
     private final String message;

@@ -30,6 +30,10 @@ app:
   cors:
     allowed-origins:
       - http://localhost:3000
+  jwt:
+    secret: ${JWT_SECRET:ember-local-dev-jwt-secret-key-must-be-at-least-256-bits-long}
+    access-expiration: 1800000
+    refresh-expiration: 604800000
 
 ---
 # 로컬 개발 환경 (로컬 PostgreSQL + Swagger)

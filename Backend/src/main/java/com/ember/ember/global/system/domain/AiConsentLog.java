@@ -31,4 +31,13 @@ public class AiConsentLog {
 
     @Column(name = "acted_at", nullable = false)
     private LocalDateTime actedAt;
+
+    @Builder
+    public AiConsentLog(User user, String action, String consentType, String ipAddress) {
+        this.user = user;
+        this.action = action;
+        this.consentType = consentType;
+        this.ipAddress = ipAddress;
+        this.actedAt = LocalDateTime.now();
+    }
 }

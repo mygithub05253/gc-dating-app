@@ -1,0 +1,18 @@
+package com.ember.ember.idealtype.repository;
+
+import com.ember.ember.idealtype.domain.UserIdealKeyword;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+
+public interface UserIdealKeywordRepository extends JpaRepository<UserIdealKeyword, Long> {
+
+    @Query("SELECT uik FROM UserIdealKeyword uik JOIN FETCH uik.keyword WHERE uik.user.id = :userId")
+    List<UserIdealKeyword> findByUserIdWithKeyword(Long userId);
+
+    @Modifying
+    @Query("DELETE FROM UserIdealKeyword uik WHERE uik.user.id = :userId")
+    void deleteByUserId(Long userId);
+}

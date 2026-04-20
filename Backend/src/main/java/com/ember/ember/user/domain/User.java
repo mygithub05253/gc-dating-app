@@ -22,23 +22,23 @@ public class User extends BaseEntity {
     @Column(length = 100, unique = true)
     private String email;
 
-    @Column(name = "real_name", nullable = false, length = 20)
+    @Column(name = "real_name", length = 20)
     private String realName;
 
-    @Column(nullable = false, unique = true, length = 20)
+    @Column(unique = true, length = 20)
     private String nickname;
 
-    @Column(name = "birth_date", nullable = false)
+    @Column(name = "birth_date")
     private LocalDate birthDate;
 
-    @Column(nullable = false, length = 10)
+    @Column(length = 10)
     @Enumerated(EnumType.STRING)
     private Gender gender;
 
-    @Column(nullable = false, length = 20)
+    @Column(length = 20)
     private String sido;
 
-    @Column(nullable = false, length = 30)
+    @Column(length = 30)
     private String sigungu;
 
     @Column(length = 50)
@@ -92,5 +92,79 @@ public class User extends BaseEntity {
 
     public enum UserRole {
         ROLE_GUEST, ROLE_USER
+    }
+
+    @Builder
+    public User(String email, UserStatus status, UserRole role) {
+        this.email = email;
+        this.status = status != null ? status : UserStatus.ACTIVE;
+        this.role = role != null ? role : UserRole.ROLE_GUEST;
+        this.onboardingStep = 0;
+    }
+
+    /** 온보딩 1단계: 프로필 등록 */
+    public void completeProfile(String realName, String nickname, LocalDate birthDate,
+                                Gender gender, String sido, String sigungu, String school) {
+        this.realName = realName;
+        this.nickname = nickname;
+        this.birthDate = birthDate;
+        this.gender = gender;
+        this.sido = sido;
+        this.sigungu = sigungu;
+        this.school = school;
+        this.onboardingStep = 1;
+        this.lastNicknameChangedAt = LocalDateTime.now();
+    }
+
+    /** 온보딩 2단계: 이상형 키워드 설정 완료 */
+    public void completeIdealType() {
+        this.onboardingStep = 2;
+        this.role = UserRole.ROLE_USER;
+    }
+
+    /** 프로필 부분 수정 */
+    public void updateProfile(String nickname, String sido, String sigungu, String school) {
+        if (nickname != null) {
+            this.nickname = nickname;
+            this.lastNicknameChangedAt = LocalDateTime.now();
+        }
+        if (sido != null) {
+            this.sido = sido;
+        }
+        if (sigungu != null) {
+            this.sigungu = sigungu;
+        }
+        if (school != null) {
+            this.school = school;
+        }
+    }
+
+    /** 로그인 시간 갱신 */
+    public void updateLastLoginAt() {
+        this.lastLoginAt = LocalDateTime.now();
+    }
+
+    /** 탈퇴 유예 처리 */
+    public void deactivate() {
+        this.status = UserStatus.DEACTIVATED;
+        this.deactivatedAt = LocalDateTime.now();
+        this.permanentDeleteAt = this.deactivatedAt.plusDays(30);
+    }
+
+    /** 계정 복구 */
+    public void restore() {
+        this.status = UserStatus.ACTIVE;
+        this.deactivatedAt = null;
+        this.permanentDeleteAt = null;
+    }
+
+    /** 튜토리얼 완료 */
+    public void completeTutorial(LocalDateTime completedAt) {
+        this.tutorialCompletedAt = completedAt;
+    }
+
+    /** 온보딩 완료 여부 */
+    public boolean isOnboardingCompleted() {
+        return this.onboardingStep >= 2;
     }
 }

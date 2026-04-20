@@ -27,6 +27,13 @@ public class SocialAccount extends BaseEntity {
     private String providerId;
 
     public enum Provider {
-        KAKAO, NAVER, APPLE, GOOGLE
+        KAKAO
+    }
+
+    @Builder
+    public SocialAccount(User user, Provider provider, String providerId) {
+        this.user = user;
+        this.provider = provider;
+        this.providerId = providerId;
     }
 }
