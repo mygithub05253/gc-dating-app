@@ -59,7 +59,7 @@ cd Backend && ./gradlew bootRun
 cd admin && npm run dev
 ```
 
-## 현재 진행 상황 (2026-04-21)
+## 현재 진행 상황 (2026-04-22)
 
 ### 완료
 - `chore/project-setup` 브랜치에서 초기 세팅 완료 (2026-03-24)
@@ -88,7 +88,7 @@ cd admin && npm run dev
 - `.env.local.example`: 로컬용 환경변수 템플릿
 - `build.gradle.kts`: `.env.local` 우선 로드 지원
 
-## Backend API 구현 현황 (2026-04-21)
+## Backend API 구현 현황 (2026-04-22)
 
 ### 구현 완료 도메인
 
@@ -170,26 +170,78 @@ cd admin && npm run dev
 - `POST /api/chat-rooms/{roomId}/couple-accept` — 커플 수락 (Couple INSERT + ChatRoom COUPLE_CONFIRMED)
 - `POST /api/chat-rooms/{roomId}/couple-reject` — 커플 거절
 
-### 미구현 도메인 (Entity만 존재)
-- AiReport (AI 리포트) — Controller/Service 없음
-- Report (신고) — Controller/Service 없음
-- Topic (주제) — Controller/Service 없음
-- Admin (관리자) — Controller/Service 없음
+#### Report (신고/차단) — ✅ 완료 (2026-04-22, PR #44)
+- `POST /api/users/{targetUserId}/report` — 사용자 신고 (7일 중복 방지, 5건 관리자 알림)
+- `POST /api/users/{targetUserId}/block` — 차단 (매칭/교환/채팅 연쇄 종료, 단일 트랜잭션)
+- `DELETE /api/users/{targetUserId}/block` — 차단 해제
+- `GET /api/users/me/block-list` — 차단 목록 (커서 페이징)
+- Block.reblock(): 해제 후 재차단 시 unique 위반 방지
+
+#### Notification (알림) — ✅ 완료 (2026-04-22, PR #44)
+- `GET /api/notifications` — 알림 목록 (최근 30일)
+- `PATCH /api/notifications/{id}/read` — 읽음 처리 (멱등성 보장)
+- `PATCH /api/notifications/read-all` — 전체 읽음 (@Modifying 단일 쿼리)
+- `GET /api/users/me/notification-settings` — 알림 설정 조회 (6종 카테고리)
+- `PATCH /api/users/me/notification-settings` — 알림 설정 수정 (Upsert)
+- 기존 UserNotificationSetting 엔티티 활용 (NotificationSetting 중복 제거)
+
+#### Account (계정 관리) — ✅ 완료 (2026-04-22, PR #44)
+- `POST /api/users/me/deactivate` — 회원 탈퇴 (30일 유예, 교환/채팅 연쇄 종료)
+- `POST /api/users/me/restore` — 유예 계정 복구 (마이페이지 경로)
+- `DELETE /api/consent` — AI 동의 철회 (Append-Only, Redis 캐시 삭제)
+- `GET /api/users/me/ai-profile` — AI 성격 분석 결과 조회 (3편 미만 안내)
+- `POST /api/users/me/appeals` — 제재 이의신청 (20~500자, 중복 방지)
+
+#### MyPage (마이페이지) — ✅ 완료 (2026-04-22, PR #44)
+- `GET /api/users/me/ideal-type` — 이상형 키워드 조회 (마이페이지)
+- `PUT /api/users/me/ideal-type` — 키워드 수정 (DELETE-then-INSERT, 최대 3개)
+- `GET /api/users/me/history/exchange-rooms` — 교환일기 히스토리 (커서 페이징)
+- `GET /api/users/me/history/chat-rooms` — 채팅 히스토리 (커서 페이징)
+- `PATCH /api/users/me/settings` — 앱 설정 수정 (다크모드/언어/연령필터, Upsert)
+
+#### Notice/Support (공지/FAQ/고객지원) — ✅ 완료 (2026-04-22, PR #44)
+- `GET /api/notices` — 공지사항 목록 (고정 우선, 최신순)
+- `GET /api/notices/{id}` — 공지사항 상세
+- `GET /api/notices/banners` — 활성 배너 (최대 5개)
+- `GET /api/notices/unread-count` — 미읽음 공지 수
+- `GET /api/faq` — FAQ 목록
+- `POST /api/support/inquiry` — 1:1 문의 접수 (5건 제한)
+- `GET /api/support/inquiries` — 내 문의 목록
+- `GET /api/support/inquiries/{id}` — 문의 상세
+
+#### AI Pipeline (AI 비동기 파이프라인) — ✅ 완료 (2026-04-22, PR #45, #46)
+- OutboxRelay `@Transactional` 버그 수정 (PESSIMISTIC_WRITE 트랜잭션 필수)
+- MockAiConsumer (`@Profile("local")`): 4개 요청 큐 → 2초 후 Mock 결과 발행
+- `POST /api/dev/ai/simulate/{diaryId}` — 배포 서버용 AI 결과 시뮬레이션
+- AiResultConsumer → DiaryAnalysisResultHandler: diary_keywords 저장 + analysisStatus 갱신
+- 설계서 4.2~4.4 기준 태그 반영: 감정 16개, 라이프스타일 3축, 관계성향 4축, 톤 3개
+- 이상형 키워드 10개 DB keywords 테이블과 설계서 일치 확인
+
+#### FCM/유사도/배치 — ✅ 완료 (2026-04-22, PR #46)
+- FcmService.sendPushToUser(): 유저 전체 디바이스 발송 + 만료 토큰 자동 삭제
+- SimilarityService: UserVector fp16 코사인 유사도 계산 + Redis 24h 캐시
+  - 0.7 이상 "잘 맞을 것 같아요" / 0.5~0.7 "공통점이 있어요"
+  - ExploreService 탐색/상세/미리보기 3곳 배지 적용
+- AccountCleanupScheduler: 매일 자정 cron, 30일 초과 DEACTIVATED 유저 영구 처리
+  - 일기 익명화(authorId=NULL) + 개인정보 삭제 + FCM 토큰 삭제 + 소셜 연동 해제
+
+### 미구현 도메인
+- Admin (관리자) — 이동원 담당, 관리자 명세서 v2.1/v2.2 기준
+- Topic (주제) — 관리자 콘텐츠 관리에서 구현 예정
 
 ### 알려진 TODO
-- FcmService: 만료된 FCM 토큰 자동 삭제 미구현 (`global/notification/FcmService.java:42`)
 - **[v1.0] 일기 상세 Redis 캐시** — `AI:DIARY:{diaryId}` 캐시 조회/갱신 + 수정 시 캐시 무효화
 - **[v1.0] 임시저장 Redis 동기화** — `DRAFT:{userId}:{date}` Redis 저장 (TTL 24h) + 멀티 디바이스 동기화
 
-## API 테스트 앱 (2026-04-21)
+## API 테스트 앱 (2026-04-22)
 
 - **위치**: `test_frontend/` (Flutter)
 - **대상 서버**: `https://ember-app.duckdns.org` (배포 서버)
-- **테스트 가능 API**: 도메인 1~8 전체 (인증, 온보딩, 일기, 매칭, 교환일기, 채팅, 커플)
+- **테스트 가능 API**: 사용자 도메인 전체 (인증~커플 + 신고/차단/알림/계정/마이페이지/공지/지원 + AI 시뮬레이션)
 - **Dev 로그인**: 카카오 없이 userId 지정 로그인 (로컬/배포 모두 가능, `/api/dev/token`)
 - **탭 구성**: 일기 쓰기 | 히스토리 | 탐색 | 교환일기 | 채팅 | 임시저장 | 설정
-- **교환일기 탭**: 방 목록, 방 상세(턴/일기/리액션), 일기 작성, 관계 확장 선택, AI 리포트
-- **채팅 탭**: 채팅방 목록, 메시지 전송/수신(3초 폴링), 상대 프로필, 커플 요청/수락/거절, 나가기
+- **설정 탭**: 프로필/AI프로필/이상형 | 알림(목록/읽음/설정) | 신고/차단 | 히스토리 | AI 시뮬레이션 | 공지/FAQ/문의 | 계정(복구/탈퇴/로그아웃)
+- **AI 시뮬레이션**: diaryId 입력 → `POST /api/dev/ai/simulate/{id}` → 2~3초 후 태그 반영
 - **매칭 성사 시**: 자동으로 교환일기 탭으로 이동
 
 ## 개발 진행 방식
@@ -212,23 +264,24 @@ cd admin && npm run dev
 
 ### v0.5 (교환일기, AI 연동, 채팅, 커플) ★ 진도평가
 - [x] 교환일기 매칭 성사 & 방 생성 + 릴레이 작성 API (4턴) — 박종수 ✅
-- [ ] 교환일기 수신 알림 + 리마인드 + 만료 처리 + 감정 리액션 — 이동원
-- [ ] KcELECTRA 성격 분석 비동기 처리 (RabbitMQ) + AI 프로필 키워드 추출 — 박종수
+- [x] 교환일기 수신 알림 + 리마인드 + 만료 처리 + 감정 리액션 — 이동원 ✅ (박종수 대신 구현)
+- [x] KcELECTRA 성격 분석 비동기 처리 (RabbitMQ) + AI 프로필 키워드 추출 — 박종수 ✅ (Mock Consumer + OutboxRelay)
 - [x] 관계 확장 양방향 선택 + 자동 1턴 연장 + 채팅방 생성 트리거 — 박종수 ✅ (이동원 대신 구현)
 - [x] 1:1 채팅 API (WebSocket STOMP) + 실시간 메시지 + 읽음 확인 + 커플 요청/수락 — 박종수 ✅
 
 ### v0.7 (관리자, 콘텐츠, 신고, 검열)
 - [ ] 관리자 로그인/토큰갱신 + 비밀번호 변경 + RBAC — 이동원
-- [ ] 관리자 계정 CRUD + KPI 대시보드 API — 박종수
+- [ ] 관리자 계정 CRUD + KPI 대시보드 API — 이동원
 - [ ] 회원 목록/상세 조회 + 회원 제재 + 활동 타임라인 — 이동원
-- [ ] 콘텐츠 관리 + 신고 처리 + 차단 관리 + 검열 기능 — 박종수
+- [ ] 콘텐츠 관리 + 신고 처리 + 차단 관리 + 검열 기능 — 이동원
+- 사용자 측 신고/차단/검열 API는 박종수가 PR #44에서 구현 완료
 
 ### v0.9 (보안, 분석, 운영도구, 시스템설정)
-- [ ] FCM 푸시 알림 + 알림 센터 + 신고 + 차단/매칭 영구 제외 — 이동원
-- [ ] 회원 탈퇴(30일 유예) + 계정 복구 + 암호화 + 제재 알림/이의신청 — 박종수
+- [x] FCM 푸시 알림 + 알림 센터 + 신고 + 차단/매칭 영구 제외 — 박종수 ✅ (PR #44, #46)
+- [x] 회원 탈퇴(30일 유예) + 계정 복구 + 암호화 + 제재 알림/이의신청 — 박종수 ✅ (PR #44, #46)
 - [ ] Rate Limiting + 입력값 보안 + 로그 마스킹 — 이동원
-- [ ] 관리자 분석 API + 리포트 내보내기 + 운영 효율화 도구 — 박종수
-- [ ] 시스템 설정 + 확장 기능 (임시저장, 공지사항, FAQ, 튜토리얼) — 이동원
+- [ ] 관리자 분석 API + 리포트 내보내기 + 운영 효율화 도구 — 이동원
+- [x] 시스템 설정 + 확장 기능 (임시저장, 공지사항, FAQ, 튜토리얼) — 박종수 ✅ (PR #44)
 
 ### v1.0 (최적화 & 검증) ★ 진도평가
 - [ ] 전체 API 통합 테스트 + 시나리오 테스트 — 박종수
@@ -240,9 +293,10 @@ cd admin && npm run dev
 ### 명세서 (`.claude/specification/` — 레포 내 참조용)
 - ERD: `ERD_명세서_v2_1.md` (53개 테이블) + `v2_2.md` (증분: +3 테이블)
 - 사용자 API: `사용자_API_통합명세서_v2_2.md` (최신, 4.6/4.7 매칭 요청 수락 추가)
-- 관리자 API: `관리자_API_통합명세서_v2.0.md`
+- 관리자 API: `관리자_API_통합명세서_v2.1.md` + `v2_2.md` (증분, AI 모니터링)
 - 사용자 기능명세서: `사용자_기능명세서_v2_2_1.md` (최신 정본, 5.5 받은 요청 추가) + `v2_3.md` (증분, AI 파이프라인)
-- 관리자 기능명세서: `관리자_기능명세서_v2.0.md`
+- 관리자 기능명세서: `관리자_기능명세서_v2.1.md` + `v2_2.md` (증분, AI 모니터링)
+- 설계서: `(1팀)설계서_v1.1(김주영,박종수,이동원,문정민,한은진).pdf` (487페이지, AI 태그/키워드 정의 4장 참조)
 - 화면API매핑: `엠버_화면API매핑_v12.md` (5.5 받은 요청 화면 추가)
 - 변경사항: `사용자_API_v2_2_변경사항.md`, `사용자_명세서_v2_2_1_변경사항.md`
 - 배포 가이드: `GACHON_DEPLOYMENT.md`
@@ -377,10 +431,11 @@ cd C:/Users/jjang/main/test_frontend && /c/flutter/bin/flutter pub get
 - DB 체크 제약조건 이슈 발견 → `exchange_rooms_status_check`에 `CHAT_CONNECTED`, `ENDED` 추가로 해결
 - `couples_status_check`에 `ACTIVE` 추가, `exchange_reports_status_check`에 `CONSENT_REQUIRED` 추가
 
-### 발견된 이슈
-- curl에서 한글 JSON 전송 시 UTF-8 인코딩 문제 발생 (`Invalid UTF-8 start byte 0xb0`)
-  - 해결: `--data-binary` + heredoc 사용으로 UTF-8 보장
-- FcmService: 만료된 FCM 토큰 자동 삭제 미구현 (`global/notification/FcmService.java:42`)
-- prod DB에 `visibility` 컬럼 없어서 탐색 API 500 에러 → Supabase에서 수동 추가로 해결
-- prod DB `exchange_rooms_status_check`에 `CHAT_CONNECTED`/`ENDED` 누락 → Supabase에서 수동 추가로 해결
+### 발견 및 해결된 이슈
+- curl에서 한글 JSON 전송 시 UTF-8 인코딩 문제 → `--data-binary` + heredoc으로 해결
+- FcmService 만료 토큰 자동 삭제 → PR #46에서 구현 완료
+- prod DB `visibility` 컬럼 누락 → Supabase에서 수동 추가로 해결
+- prod DB check 제약조건 누락 (`CHAT_CONNECTED`/`ENDED`/`ACTIVE`/`CONSENT_REQUIRED`) → 수동 추가
+- prod DB `user_notification_settings`에 레거시 컬럼 (`diary_enabled`/`event_enabled`) → DEFAULT true 설정으로 해결
+- OutboxRelay `relay()` 메서드 `@Transactional` 누락 → PR #45에서 수정 (prod PENDING 멈춤 해결)
 - `DiaryCreateRequest`에 `visibility` 필드 필수 — 앱에서 `PRIVATE` 값 전송 필요
