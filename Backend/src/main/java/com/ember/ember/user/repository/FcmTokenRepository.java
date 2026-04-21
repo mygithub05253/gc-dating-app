@@ -10,4 +10,10 @@ public interface FcmTokenRepository extends JpaRepository<FcmToken, Long> {
     Optional<FcmToken> findByUserIdAndDeviceType(Long userId, FcmToken.DeviceType deviceType);
 
     Optional<FcmToken> findByFcmToken(String fcmToken);
+
+    /** 특정 유저의 모든 FCM 토큰 조회 */
+    java.util.List<FcmToken> findByUserId(Long userId);
+
+    /** 만료된 토큰 삭제 */
+    void deleteByFcmToken(String fcmToken);
 }

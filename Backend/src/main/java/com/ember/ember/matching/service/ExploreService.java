@@ -18,6 +18,7 @@ import com.ember.ember.notification.domain.Notification;
 import com.ember.ember.notification.repository.NotificationRepository;
 import com.ember.ember.user.domain.User;
 import com.ember.ember.user.repository.UserRepository;
+import com.ember.ember.matching.service.SimilarityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -52,6 +53,7 @@ public class ExploreService {
     private final ExchangeRoomRepository exchangeRoomRepository;
     private final NotificationRepository notificationRepository;
     private final FcmService fcmService;
+    private final SimilarityService similarityService;
 
     /**
      * 5.1 일기 탐색 (Pull 방식) — 커서 기반 페이징
@@ -83,7 +85,7 @@ public class ExploreService {
         }
 
         List<ExploreResponse.ExploreDiaryItem> items = diaries.stream()
-                .map(this::toExploreItem)
+                .map(d -> toExploreItem(userId, d))
                 .collect(Collectors.toList());
 
         Long nextCursor = hasNext && !items.isEmpty()
@@ -139,7 +141,7 @@ public class ExploreService {
                 .moodTags(moodTags)
                 .category(diary.getCategory())
                 .createdAt(diary.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                .similarityBadge(null)
+                .similarityBadge(similarityService.getSimilarityBadge(userId, author.getId()))
                 .otherDiariesPreview(otherPreviews)
                 .build();
     }
@@ -183,7 +185,7 @@ public class ExploreService {
                 .aiIntro(diary.getSummary())
                 .category(diary.getCategory())
                 .matchScore(null)
-                .similarityBadge(null)
+                .similarityBadge(similarityService.getSimilarityBadge(userId, author.getId()))
                 .build();
     }
 
@@ -409,7 +411,7 @@ public class ExploreService {
     // Private 헬퍼
     // ──────────────────────────────────────────────────────────────────
 
-    private ExploreResponse.ExploreDiaryItem toExploreItem(Diary diary) {
+    private ExploreResponse.ExploreDiaryItem toExploreItem(Long userId, Diary diary) {
         User author = diary.getUser();
         String previewContent = diary.getContent().length() > 80
                 ? diary.getContent().substring(0, 80) + "..."
@@ -423,7 +425,7 @@ public class ExploreService {
                 .previewContent(previewContent)
                 .category(diary.getCategory())
                 .createdAt(diary.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                .similarityBadge(null)
+                .similarityBadge(similarityService.getSimilarityBadge(userId, author.getId()))
                 .build();
     }
 
