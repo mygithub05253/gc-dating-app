@@ -27,4 +27,17 @@ public interface ExchangeRoomRepository extends JpaRepository<ExchangeRoom, Long
     @Query("SELECT r FROM ExchangeRoom r WHERE r.status = 'ACTIVE' " +
            "AND r.deadlineAt < :cutoff")
     List<ExchangeRoom> findExpiredRooms(@Param("cutoff") java.time.LocalDateTime cutoff);
+
+    /** 히스토리 조회 (완료/만료/종료된 방, 커서 기반 페이징) */
+    @Query("""
+            SELECT r FROM ExchangeRoom r
+            JOIN FETCH r.userA JOIN FETCH r.userB
+            WHERE (r.userA.id = :userId OR r.userB.id = :userId)
+              AND r.status IN ('COMPLETED', 'EXPIRED', 'TERMINATED', 'ARCHIVED', 'ENDED')
+              AND (:cursor IS NULL OR r.id < :cursor)
+            ORDER BY r.modifiedAt DESC
+            LIMIT :size
+            """)
+    List<ExchangeRoom> findHistoryByParticipant(
+            @Param("userId") Long userId, @Param("cursor") Long cursor, @Param("size") int size);
 }

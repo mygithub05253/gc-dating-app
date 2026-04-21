@@ -24,4 +24,17 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
     @Query("SELECT cr FROM ChatRoom cr WHERE (cr.userA.id = :userId OR cr.userB.id = :userId) " +
            "AND cr.status NOT IN ('TERMINATED') ORDER BY cr.modifiedAt DESC")
     List<ChatRoom> findByParticipant(@Param("userId") Long userId);
+
+    /** 히스토리 조회 (종료된 채팅방, 커서 기반 페이징) */
+    @Query("""
+            SELECT cr FROM ChatRoom cr
+            JOIN FETCH cr.userA JOIN FETCH cr.userB
+            WHERE (cr.userA.id = :userId OR cr.userB.id = :userId)
+              AND cr.status IN ('CHAT_LEFT', 'TERMINATED')
+              AND (:cursor IS NULL OR cr.id < :cursor)
+            ORDER BY cr.modifiedAt DESC
+            LIMIT :size
+            """)
+    List<ChatRoom> findHistoryByParticipant(
+            @Param("userId") Long userId, @Param("cursor") Long cursor, @Param("size") int size);
 }

@@ -31,4 +31,15 @@ public class UserWithdrawalLog {
 
     @Column(name = "permanent_delete_at", nullable = false)
     private LocalDateTime permanentDeleteAt;
+
+    /** 탈퇴 로그 생성 */
+    public static UserWithdrawalLog create(User user, String reason, String detail) {
+        UserWithdrawalLog log = new UserWithdrawalLog();
+        log.user = user;
+        log.reason = reason;
+        log.detail = detail;
+        log.withdrawnAt = LocalDateTime.now();
+        log.permanentDeleteAt = log.withdrawnAt.plusDays(30);
+        return log;
+    }
 }
