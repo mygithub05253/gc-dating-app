@@ -30,6 +30,13 @@ public class Report extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private ReportReason reason;
 
+    @Column(length = 30)
+    @Enumerated(EnumType.STRING)
+    private ContextType contextType;
+
+    @Column(name = "context_id")
+    private Long contextId;
+
     @Column(columnDefinition = "TEXT")
     private String detail;
 
@@ -53,5 +60,23 @@ public class Report extends BaseEntity {
 
     public enum ReportStatus {
         PENDING, IN_REVIEW, RESOLVED, DISMISSED
+    }
+
+    public enum ContextType {
+        DIARY, EXCHANGE_DIARY, CHAT_MESSAGE, PROFILE
+    }
+
+    /** 신고 생성 */
+    public static Report create(User reporter, User targetUser, ReportReason reason,
+                                ContextType contextType, Long contextId, String detail) {
+        Report report = new Report();
+        report.reporter = reporter;
+        report.targetUser = targetUser;
+        report.reason = reason;
+        report.contextType = contextType;
+        report.contextId = contextId;
+        report.detail = detail;
+        report.status = ReportStatus.PENDING;
+        return report;
     }
 }

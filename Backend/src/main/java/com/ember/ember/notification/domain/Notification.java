@@ -54,4 +54,12 @@ public class Notification {
         notification.sentAt = LocalDateTime.now();
         return notification;
     }
+
+    /** 읽음 처리 (멱등성: 이미 읽음이면 건너뜀) */
+    public void markRead() {
+        if (!this.isRead) {
+            this.isRead = true;
+            this.readAt = LocalDateTime.now();
+        }
+    }
 }

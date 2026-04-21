@@ -120,6 +120,13 @@ public enum ErrorCode {
     APPEAL_ALREADY_PENDING("AP002", HttpStatus.CONFLICT, "이미 진행 중인 이의신청이 있습니다."),
     APPEAL_PERMANENT_BAN("AP003", HttpStatus.FORBIDDEN, "영구 정지 계정은 이의신청이 불가합니다."),
 
+    // ── 알림 (N) ──
+    NOTIFICATION_NOT_FOUND("N001", HttpStatus.NOT_FOUND, "존재하지 않는 알림이거나 접근 권한이 없습니다."),
+
+    // ── 검열 (SC) ──
+    // ── AI 동의 (AC) ──
+    CONSENT_NOT_FOUND("AC001", HttpStatus.BAD_REQUEST, "동의 이력이 없습니다."),
+
     // ── 검열 (SC) ──
     CONTENT_FILTERED("SC001", HttpStatus.BAD_REQUEST, "부적절한 내용이 포함되어 있습니다."),
 

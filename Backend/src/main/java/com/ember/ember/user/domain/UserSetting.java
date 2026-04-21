@@ -31,4 +31,18 @@ public class UserSetting extends BaseEntity {
     public enum Theme {
         LIGHT, DARK, SYSTEM
     }
+
+    /** 기본 설정으로 생성 */
+    public static UserSetting createDefault(User user) {
+        UserSetting setting = new UserSetting();
+        setting.user = user;
+        return setting;
+    }
+
+    /** 선택적 필드 업데이트 (null이 아닌 필드만 변경) */
+    public void updateIfPresent(Boolean darkMode, String language, Integer ageFilterRange) {
+        if (darkMode != null) this.theme = darkMode ? Theme.DARK : Theme.LIGHT;
+        if (language != null) this.language = language;
+        if (ageFilterRange != null) this.ageFilterRange = ageFilterRange;
+    }
 }

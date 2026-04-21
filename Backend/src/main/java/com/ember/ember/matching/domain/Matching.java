@@ -56,4 +56,9 @@ public class Matching extends BaseEntity {
         this.status = MatchingStatus.MATCHED;
         this.matchedAt = LocalDateTime.now();
     }
+
+    /** 매칭 취소 (차단/탈퇴 시) */
+    public void cancel() {
+        this.status = MatchingStatus.CANCELLED;
+    }
 }

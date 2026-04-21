@@ -54,4 +54,14 @@ public class Appeal extends BaseEntity {
     public enum AppealDecision {
         MAINTAIN, REDUCE, RELEASE
     }
+
+    /** 이의신청 생성 */
+    public static Appeal create(User user, SanctionHistory sanction, String reason) {
+        Appeal appeal = new Appeal();
+        appeal.user = user;
+        appeal.sanction = sanction;
+        appeal.reason = reason;
+        appeal.status = AppealStatus.PENDING;
+        return appeal;
+    }
 }

@@ -51,4 +51,15 @@ public class Inquiry extends BaseEntity {
     public enum InquiryStatus {
         OPEN, IN_PROGRESS, RESOLVED, CLOSED
     }
+
+    /** 문의 생성 */
+    public static Inquiry create(User user, String category, String title, String content) {
+        Inquiry inquiry = new Inquiry();
+        inquiry.user = user;
+        inquiry.category = category;
+        inquiry.title = title;
+        inquiry.content = content;
+        inquiry.status = InquiryStatus.OPEN;
+        return inquiry;
+    }
 }

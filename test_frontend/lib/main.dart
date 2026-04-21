@@ -1531,65 +1531,216 @@ class LifestyleReportScreen extends StatelessWidget {
   );
 }
 
-// ── 설정 탭 (로그아웃 등) ──
-class SettingsTab extends StatelessWidget {
+// ── 설정 탭 (프로필/알림/차단/계정관리/로그아웃) ──
+class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
 
   @override
+  State<SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<SettingsTab> {
+  final app = AppState();
+
+  void _snack(String msg) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  void _showJson(String title, dynamic data) {
+    if (!mounted) return;
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: Text(title),
+      content: SingleChildScrollView(
+        child: Text(const JsonEncoder.withIndent('  ').convert(data), style: const TextStyle(fontSize: 12)),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('닫기'))],
+    ));
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final app = AppState();
     return Scaffold(
       appBar: AppBar(title: const Text('설정')),
       body: ListView(
         children: [
+          // ── 프로필 ──
+          const Padding(padding: EdgeInsets.all(12), child: Text('프로필', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
           ListTile(
-            title: const Text('내 프로필'),
-            leading: const Icon(Icons.person),
+            title: const Text('내 프로필'), leading: const Icon(Icons.person),
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/users/me', options: app.authHeaders);
-                final data = res.data['data'];
-                if (context.mounted) {
-                  showDialog(context: context, builder: (_) => AlertDialog(
-                    title: Text(data['nickname'] ?? ''),
-                    content: Text(
-                      '성별: ${data['gender']}\n'
-                      '지역: ${data['sido']} ${data['sigungu']}\n'
-                      '학교: ${data['school'] ?? '미입력'}\n'
-                      '온보딩: step=${data['onboardingStep']}\n'
-                      '키워드: ${data['idealKeywords']?.length ?? 0}개'),
-                  ));
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(app.errMsg(e))));
-                }
-              }
+                _showJson('내 프로필', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
           ListTile(
-            title: const Text('토큰 갱신'),
-            leading: const Icon(Icons.refresh),
+            title: const Text('AI 프로필 (성격 분석)'), leading: const Icon(Icons.psychology),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/users/me/ai-profile', options: app.authHeaders);
+                _showJson('AI 프로필', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+          ListTile(
+            title: const Text('이상형 키워드'), leading: const Icon(Icons.favorite),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/users/me/ideal-type', options: app.authHeaders);
+                _showJson('이상형 키워드', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+
+          // ── 알림 ──
+          const Divider(),
+          const Padding(padding: EdgeInsets.all(12), child: Text('알림', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ListTile(
+            title: const Text('알림 목록'), leading: const Icon(Icons.notifications),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/notifications', options: app.authHeaders);
+                _showJson('알림 (미읽음: ${res.data['data']['unreadCount']})', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+          ListTile(
+            title: const Text('전체 읽음 처리'), leading: const Icon(Icons.done_all),
+            onTap: () async {
+              try {
+                final res = await app.dio.patch('${app.baseUrl}/api/notifications/read-all', options: app.authHeaders);
+                _snack('읽음 처리: ${res.data['data']['updatedCount']}건');
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+          ListTile(
+            title: const Text('알림 설정'), leading: const Icon(Icons.notifications_active),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/users/me/notification-settings', options: app.authHeaders);
+                _showJson('알림 설정', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+          ListTile(
+            title: const Text('알림 설정 수정 (채팅 OFF)'), leading: const Icon(Icons.toggle_off),
+            onTap: () async {
+              try {
+                final res = await app.dio.patch('${app.baseUrl}/api/users/me/notification-settings',
+                  data: {'chat': false}, options: app.authHeaders);
+                _showJson('알림 설정 변경됨', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+
+          // ── 신고/차단 ──
+          const Divider(),
+          const Padding(padding: EdgeInsets.all(12), child: Text('신고/차단', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ListTile(
+            title: const Text('차단 목록'), leading: const Icon(Icons.block),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/users/me/block-list', options: app.authHeaders);
+                _showJson('차단 목록', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+          ListTile(
+            title: const Text('사용자 신고 (상대방)'), leading: const Icon(Icons.report),
+            onTap: () => _showReportDialog(),
+          ),
+          ListTile(
+            title: const Text('사용자 차단 (상대방)'), leading: const Icon(Icons.person_off),
+            onTap: () => _showBlockDialog(),
+          ),
+
+          // ── 히스토리 ──
+          const Divider(),
+          const Padding(padding: EdgeInsets.all(12), child: Text('히스토리', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ListTile(
+            title: const Text('교환일기 히스토리'), leading: const Icon(Icons.history),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/users/me/history/exchange-rooms', options: app.authHeaders);
+                _showJson('교환일기 히스토리', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+          ListTile(
+            title: const Text('채팅 히스토리'), leading: const Icon(Icons.chat_bubble_outline),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/users/me/history/chat-rooms', options: app.authHeaders);
+                _showJson('채팅 히스토리', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+
+          // ── 앱 설정 ──
+          const Divider(),
+          const Padding(padding: EdgeInsets.all(12), child: Text('앱 설정', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ListTile(
+            title: const Text('다크모드 ON'), leading: const Icon(Icons.dark_mode),
+            onTap: () async {
+              try {
+                final res = await app.dio.patch('${app.baseUrl}/api/users/me/settings',
+                  data: {'darkMode': true}, options: app.authHeaders);
+                _showJson('앱 설정', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+
+          // ── 공지/FAQ ──
+          const Divider(),
+          const Padding(padding: EdgeInsets.all(12), child: Text('공지/지원', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ListTile(
+            title: const Text('공지사항'), leading: const Icon(Icons.campaign),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/notices');
+                _showJson('공지사항', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+          ListTile(
+            title: const Text('FAQ'), leading: const Icon(Icons.help),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/faq');
+                _showJson('FAQ', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+          ListTile(
+            title: const Text('1:1 문의 접수'), leading: const Icon(Icons.support_agent),
+            onTap: () => _showInquiryDialog(),
+          ),
+          ListTile(
+            title: const Text('내 문의 목록'), leading: const Icon(Icons.list_alt),
+            onTap: () async {
+              try {
+                final res = await app.dio.get('${app.baseUrl}/api/support/inquiries', options: app.authHeaders);
+                _showJson('내 문의 목록', res.data['data']);
+              } catch (e) { _snack(app.errMsg(e)); }
+            },
+          ),
+
+          // ── 계정 ──
+          const Divider(),
+          const Padding(padding: EdgeInsets.all(12), child: Text('계정', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ListTile(
+            title: const Text('토큰 갱신'), leading: const Icon(Icons.refresh),
             onTap: () async {
               try {
                 final res = await app.dio.post('${app.baseUrl}/api/auth/refresh',
                   data: {'refreshToken': app.refreshToken});
                 app.accessToken = res.data['data']['accessToken'];
                 app.refreshToken = res.data['data']['refreshToken'];
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('토큰 갱신 성공!')));
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(app.errMsg(e))));
-                }
-              }
+                _snack('토큰 갱신 성공!');
+              } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
-          const Divider(),
           ListTile(
             title: const Text('로그아웃', style: TextStyle(color: Colors.red)),
             leading: const Icon(Icons.logout, color: Colors.red),
@@ -1618,9 +1769,102 @@ class SettingsTab extends StatelessWidget {
               ));
             },
           ),
+          ListTile(
+            title: const Text('회원 탈퇴 (30일 유예)', style: TextStyle(color: Colors.red)),
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            onTap: () {
+              showDialog(context: context, builder: (_) => AlertDialog(
+                title: const Text('회원 탈퇴'),
+                content: const Text('30일 유예 기간 후 영구 삭제됩니다.\n정말 탈퇴하시겠어요?'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      try {
+                        final res = await app.dio.post('${app.baseUrl}/api/users/me/deactivate',
+                          data: {'reason': 'SERVICE_DISSATISFACTION'}, options: app.authHeaders);
+                        _showJson('탈퇴 처리', res.data['data']);
+                      } catch (e) { _snack(app.errMsg(e)); }
+                    },
+                    child: const Text('탈퇴', style: TextStyle(color: Colors.red))),
+                ],
+              ));
+            },
+          ),
         ],
       ),
     );
+  }
+
+  void _showReportDialog() {
+    final targetCtrl = TextEditingController();
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('사용자 신고'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: targetCtrl, decoration: const InputDecoration(labelText: '대상 userId'), keyboardType: TextInputType.number),
+        const SizedBox(height: 8),
+        const Text('사유: HARASSMENT', style: TextStyle(fontSize: 12, color: Colors.grey)),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(onPressed: () async {
+          Navigator.pop(context);
+          final targetId = targetCtrl.text.trim();
+          if (targetId.isEmpty) return;
+          try {
+            final res = await app.dio.post('${app.baseUrl}/api/users/$targetId/report',
+              data: {'reason': 'HARASSMENT'}, options: app.authHeaders);
+            _snack('신고 접수 완료: ID=${res.data['data']['reportId']}');
+          } catch (e) { _snack(app.errMsg(e)); }
+        }, child: const Text('신고')),
+      ],
+    ));
+  }
+
+  void _showBlockDialog() {
+    final targetCtrl = TextEditingController();
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('사용자 차단'),
+      content: TextField(controller: targetCtrl, decoration: const InputDecoration(labelText: '대상 userId'), keyboardType: TextInputType.number),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(onPressed: () async {
+          Navigator.pop(context);
+          final targetId = targetCtrl.text.trim();
+          if (targetId.isEmpty) return;
+          try {
+            await app.dio.post('${app.baseUrl}/api/users/$targetId/block', options: app.authHeaders);
+            _snack('차단 완료');
+          } catch (e) { _snack(app.errMsg(e)); }
+        }, child: const Text('차단', style: TextStyle(color: Colors.red))),
+      ],
+    ));
+  }
+
+  void _showInquiryDialog() {
+    final titleCtrl = TextEditingController();
+    final contentCtrl = TextEditingController();
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('1:1 문의'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: '제목 (5자 이상)')),
+        const SizedBox(height: 8),
+        TextField(controller: contentCtrl, decoration: const InputDecoration(labelText: '내용 (10자 이상)'), maxLines: 3),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(onPressed: () async {
+          Navigator.pop(context);
+          try {
+            final res = await app.dio.post('${app.baseUrl}/api/support/inquiry',
+              data: {'category': 'ACCOUNT', 'title': titleCtrl.text, 'content': contentCtrl.text},
+              options: app.authHeaders);
+            _snack('문의 접수 완료: ID=${res.data['data']['inquiryId']}');
+          } catch (e) { _snack(app.errMsg(e)); }
+        }, child: const Text('제출')),
+      ],
+    ));
   }
 }
 
