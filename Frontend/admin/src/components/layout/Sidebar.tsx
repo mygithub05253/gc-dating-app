@@ -147,6 +147,15 @@ const navItems: NavItem[] = [
       { title: '이의신청', href: '/admin/support/appeals' },
     ],
   },
+  {
+    title: '설정',
+    href: '/admin/settings/account',
+    icon: Settings,
+    subItems: [
+      { title: '내 계정', href: '/admin/settings/account' },
+      { title: '비밀번호 변경', href: '/admin/settings/password' },
+    ],
+  },
 ];
 
 export default function Sidebar() {
