@@ -20,10 +20,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 /**
  * 관리자 인증 서비스
  * 구현 범위: 관리자 API 통합명세서 v2.1 §1.1~1.5 (로그인/토큰갱신/로그아웃/비밀번호변경/내정보)
+ *        v2.3 확장 — Phase 3B: 프로필 수정 / 세션 조회·종료 / 활동 로그
  */
 @Slf4j
 @Service
@@ -217,11 +225,93 @@ public class AdminAuthService {
         return new AdminPasswordChangeResponse("비밀번호가 변경되었습니다", loggedOutSessions);
     }
 
-    /** 현재 관리자 정보 조회 (§1.5) */
+    /** 현재 관리자 정보 조회 (§1.5) — v2.3 확장: 최근 비밀번호 변경 시각 포함 */
     public AdminMeResponse getMe(Long adminId) {
         AdminAccount admin = adminAccountRepository.findById(adminId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
-        return AdminMeResponse.from(admin);
+        LocalDateTime lastPwdChangedAt = adminPasswordChangeLogRepository
+                .findTopByAdminOrderByChangedAtDesc(adminId)
+                .map(AdminPasswordChangeLog::getChangedAt)
+                .orElse(null);
+        return AdminMeResponse.from(admin, lastPwdChangedAt);
+    }
+
+    // ── v2.3 신규: 본인 프로필 수정 ─────────────────────────────────────────────
+
+    /**
+     * 본인 프로필(이름·이미지 URL) 수정. 이메일 변경은 §9 관리자 계정 CRUD 로 위임한다.
+     * profileImageUrl 이 외부 도메인일 경우 URL 화이트리스트 검증은 추후 추가 가능하나
+     * 현재는 포맷 검증만 수행한다(@URL @Size).
+     */
+    @Transactional
+    public AdminMeResponse updateProfile(Long adminId, AdminProfileUpdateRequest request) {
+        AdminAccount admin = adminAccountRepository.findById(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        admin.updateProfile(request.name(), request.profileImageUrl());
+        LocalDateTime lastPwdChangedAt = adminPasswordChangeLogRepository
+                .findTopByAdminOrderByChangedAtDesc(adminId)
+                .map(AdminPasswordChangeLog::getChangedAt)
+                .orElse(null);
+        return AdminMeResponse.from(admin, lastPwdChangedAt);
+    }
+
+    // ── v2.3 신규: 활성 세션 조회 / 강제 종료 ──────────────────────────────────
+
+    /** 현재 단일 Refresh Token 세션 구조 기준: 로그인 이력으로 현재 세션 메타를 추정. */
+    public List<AdminSessionResponse> getSessions(Long adminId) {
+        String rt = tokenService.getAdminRefreshToken(adminId);
+        if (rt == null) {
+            return List.of();
+        }
+        return adminLoginLogRepository.findRecentSuccessLogin(adminId, PageRequest.of(0, 1)).stream()
+                .map(log -> new AdminSessionResponse(
+                        "current",
+                        log.getUserAgent(),
+                        log.getIpAddress(),
+                        log.getPerformedAt(),
+                        true))
+                .toList();
+    }
+
+    /**
+     * 세션 강제 종료. Phase 3B 단순화: sessionId="current" 만 허용하고 관리자 RT 를 삭제한다.
+     * 다중 세션 도입 후 sessionId 매핑으로 확장.
+     */
+    @Transactional
+    public void terminateSession(Long adminId, String sessionId) {
+        if (!"current".equals(sessionId)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        tokenService.deleteAdminRefreshToken(adminId);
+        log.info("[Admin] 세션 강제 종료: adminId={} sessionId={}", adminId, sessionId);
+    }
+
+    // ── v2.3 신규: 활동 로그 통합 조회 ─────────────────────────────────────────
+
+    /**
+     * 로그인/로그아웃 + 비밀번호 변경 로그를 시간 내림차순으로 병합 조회.
+     * 단순화를 위해 두 테이블에서 각각 (page+1)*size 만큼 조회한 후 메모리 merge/sort/page.
+     */
+    public Page<AdminActivityLogResponse> getActivityLog(Long adminId, Pageable pageable) {
+        int limit = Math.max((pageable.getPageNumber() + 1) * pageable.getPageSize(), pageable.getPageSize());
+        Pageable fetch = PageRequest.of(0, limit);
+
+        List<AdminActivityLogResponse> combined = new ArrayList<>();
+        adminLoginLogRepository.findRecentByAdmin(adminId, fetch).forEach(l ->
+                combined.add(new AdminActivityLogResponse(
+                        l.getPerformedAt(), l.getAction(), l.getIpAddress(), l.getUserAgent(),
+                        Boolean.TRUE.equals(l.getIsSuccess()))));
+        adminPasswordChangeLogRepository.findRecentByAdmin(adminId, fetch).forEach(p ->
+                combined.add(new AdminActivityLogResponse(
+                        p.getChangedAt(), "PASSWORD_CHANGE", p.getIpAddress(), null, true)));
+        combined.sort(Comparator.comparing(AdminActivityLogResponse::occurredAt).reversed());
+
+        int fromIdx = (int) pageable.getOffset();
+        int toIdx = Math.min(fromIdx + pageable.getPageSize(), combined.size());
+        List<AdminActivityLogResponse> pageContent = fromIdx >= combined.size()
+                ? List.of()
+                : combined.subList(fromIdx, toIdx);
+        return new PageImpl<>(pageContent, pageable, combined.size());
     }
 
     // ── 헬퍼 ────────────────────────────────────────────────────────────────────

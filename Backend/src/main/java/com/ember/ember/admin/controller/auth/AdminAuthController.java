@@ -1,5 +1,6 @@
 package com.ember.ember.admin.controller.auth;
 
+import com.ember.ember.admin.annotation.AdminOnly;
 import com.ember.ember.admin.dto.*;
 import com.ember.ember.admin.service.AdminAuthService;
 import com.ember.ember.global.response.ApiResponse;
@@ -10,9 +11,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 관리자 인증 API
@@ -70,12 +76,58 @@ public class AdminAuthController {
                 adminAuthService.changePassword(userDetails.getUserId(), request, httpRequest)));
     }
 
-    /** 현재 관리자 정보 조회 — §1.5 */
+    /** 현재 관리자 정보 조회 — §1.5 (v2.3 확장: 프로필 이미지/로그인 시각/비번 변경 시각 포함) */
     @GetMapping("/me")
     @Operation(summary = "현재 관리자 정보 조회", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<AdminMeResponse>> me(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         return ResponseEntity.ok(ApiResponse.success(adminAuthService.getMe(userDetails.getUserId())));
+    }
+
+    // ── v2.3 신규: 본인 프로필 수정 / 세션 관리 / 활동 로그 ───────────────────────
+
+    /** 본인 프로필 수정 — Phase 3B (name, profileImageUrl). */
+    @AdminOnly
+    @PutMapping("/profile")
+    @Operation(summary = "본인 프로필 수정", description = "이름과 프로필 이미지 URL을 수정한다. 이메일 변경은 §9로 분리.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<AdminMeResponse>> updateProfile(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody AdminProfileUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAuthService.updateProfile(userDetails.getUserId(), request)));
+    }
+
+    /** 본인 활성 세션 목록 조회 — 단순화: 현재 단일 세션. */
+    @AdminOnly
+    @GetMapping("/sessions")
+    @Operation(summary = "본인 활성 세션 목록", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<List<AdminSessionResponse>>> getSessions(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAuthService.getSessions(userDetails.getUserId())));
+    }
+
+    /** 특정 세션 강제 종료 — sessionId="current" 만 허용(단순화). */
+    @AdminOnly
+    @DeleteMapping("/sessions/{sessionId}")
+    @Operation(summary = "세션 강제 종료", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<Void>> terminateSession(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable String sessionId) {
+        adminAuthService.terminateSession(userDetails.getUserId(), sessionId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    /** 본인 활동 로그(로그인/로그아웃 + 비밀번호 변경). */
+    @AdminOnly
+    @GetMapping("/activity-log")
+    @Operation(summary = "본인 활동 로그 조회", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<ApiResponse<Page<AdminActivityLogResponse>>> getActivityLog(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAuthService.getActivityLog(userDetails.getUserId(), pageable)));
     }
 
     /** Authorization 헤더에서 Bearer 토큰 추출 */

@@ -39,6 +39,9 @@ public class AdminAccount extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "profile_image_url", length = 500)
+    private String profileImageUrl;
+
     public enum AdminRole {
         VIEWER, ADMIN, SUPER_ADMIN
     }
@@ -55,5 +58,11 @@ public class AdminAccount extends BaseEntity {
     /** 비밀번호 해시 교체 (비밀번호 변경 시 호출, BCrypt로 해시된 값 전달) */
     public void changePassword(String newPasswordHash) {
         this.passwordHash = newPasswordHash;
+    }
+
+    /** 본인 프로필(이름·이미지) 수정 — null 전달 시 해당 필드 유지. */
+    public void updateProfile(String name, String profileImageUrl) {
+        if (name != null && !name.isBlank()) this.name = name;
+        if (profileImageUrl != null) this.profileImageUrl = profileImageUrl.isBlank() ? null : profileImageUrl;
     }
 }
