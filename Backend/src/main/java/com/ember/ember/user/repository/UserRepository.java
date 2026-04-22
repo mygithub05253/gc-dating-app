@@ -1,6 +1,8 @@
 package com.ember.ember.user.repository;
 
 import com.ember.ember.user.domain.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +20,25 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByNickname(String nickname);
 
     boolean existsByNickname(String nickname);
+
+    /**
+     * 관리자 API §3.1 — 회원 목록 검색.
+     * 조건: keyword (이메일/닉네임/실명 부분일치), status, gender. 모두 null 이면 전체.
+     * {@code @SQLRestriction("deleted_at IS NULL")} 에 의해 소프트 삭제된 사용자는 자동 제외된다.
+     */
+    @Query("""
+            SELECT u FROM User u
+             WHERE (:status IS NULL OR u.status = :status)
+               AND (:gender IS NULL OR u.gender = :gender)
+               AND (:keyword IS NULL
+                    OR LOWER(u.email)    LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR LOWER(u.realName) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            """)
+    Page<User> searchMembers(@Param("keyword") String keyword,
+                              @Param("status") User.UserStatus status,
+                              @Param("gender") User.Gender gender,
+                              Pageable pageable);
 
     /**
      * 매칭 후보 필터 쿼리 (M4 초기 구현).

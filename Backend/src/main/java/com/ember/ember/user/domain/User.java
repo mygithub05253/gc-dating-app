@@ -167,4 +167,37 @@ public class User extends BaseEntity {
     public boolean isOnboardingCompleted() {
         return this.onboardingStep >= 2;
     }
+
+    /**
+     * 7일 정지 — 관리자 API §3.3.
+     * status = SUSPEND_7D, suspendedAt = now, suspendedUntil = now + 7일.
+     */
+    public void suspendFor7Days(String reason, LocalDateTime now) {
+        this.status = UserStatus.SUSPEND_7D;
+        this.suspendedAt = now;
+        this.suspendedUntil = now.plusDays(7);
+        this.suspensionReason = reason;
+    }
+
+    /**
+     * 영구 정지 — 관리자 API §3.4.
+     * status = BANNED. suspendedUntil 은 null 로 유지(무기한).
+     */
+    public void banPermanently(String reason, LocalDateTime now) {
+        this.status = UserStatus.BANNED;
+        this.suspendedAt = now;
+        this.suspendedUntil = null;
+        this.suspensionReason = reason;
+    }
+
+    /**
+     * 제재 해제 — 관리자 API §3.5.
+     * status = ACTIVE, suspendedUntil/reason 초기화.
+     * 호출 측은 반드시 releaseSanction 직전에 기존 상태가 제재 상태인지 검증해야 한다.
+     */
+    public void releaseSanction() {
+        this.status = UserStatus.ACTIVE;
+        this.suspendedUntil = null;
+        this.suspensionReason = null;
+    }
 }

@@ -144,7 +144,12 @@ public enum ErrorCode {
 
     // ── 모더레이션 CRUD (Phase 3B §9.6) ──
     ADM_BANNED_WORD_NOT_FOUND("ADM013", HttpStatus.NOT_FOUND, "존재하지 않는 금칙어입니다."),
-    ADM_URL_WHITELIST_NOT_FOUND("ADM014", HttpStatus.NOT_FOUND, "존재하지 않는 허용 도메인입니다.");
+    ADM_URL_WHITELIST_NOT_FOUND("ADM014", HttpStatus.NOT_FOUND, "존재하지 않는 허용 도메인입니다."),
+
+    // ── 회원 제재 (API §3.3~3.5) ──
+    ADM_USER_NOT_SANCTIONED("ADM015", HttpStatus.BAD_REQUEST, "제재 상태가 아닌 회원입니다."),
+    ADM_BANNED_RELEASE_FORBIDDEN("ADM016", HttpStatus.FORBIDDEN, "영구 정지 해제는 SUPER_ADMIN 권한이 필요합니다."),
+    ADM_SANCTION_CONFLICT("ADM017", HttpStatus.CONFLICT, "제재 처리 중 충돌이 발생했습니다. 잠시 후 다시 시도해 주세요.");
 
     private final String code;
     private final HttpStatus status;
