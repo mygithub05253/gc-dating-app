@@ -46,4 +46,14 @@ public class AdminAccount extends BaseEntity {
     public enum AdminStatus {
         ACTIVE, INACTIVE, SUSPENDED, DELETED
     }
+
+    /** 마지막 로그인 시각 갱신 (로그인 성공 시 호출) */
+    public void updateLastLoginAt(LocalDateTime loggedInAt) {
+        this.lastLoginAt = loggedInAt;
+    }
+
+    /** 비밀번호 해시 교체 (비밀번호 변경 시 호출, BCrypt로 해시된 값 전달) */
+    public void changePassword(String newPasswordHash) {
+        this.passwordHash = newPasswordHash;
+    }
 }

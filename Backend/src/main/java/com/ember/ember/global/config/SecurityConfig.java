@@ -8,7 +8,10 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -35,8 +38,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/health").permitAll()
                         // 인증 API (인증 불필요)
                         .requestMatchers("/api/auth/**").permitAll()
-                        // 관리자 인증 API
-                        .requestMatchers("/api/admin/auth/**").permitAll()
+                        // 관리자 인증 API (관리자 API 통합명세서 v2.1 §1)
+                        //  login/refresh만 공개, logout/password/me는 authenticated 요구
+                        .requestMatchers(HttpMethod.POST, "/api/admin/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/admin/auth/refresh").permitAll()
                         // 닉네임 생성 (인증 불필요)
                         .requestMatchers("/api/users/nickname/generate").permitAll()
                         // 키워드 목록 조회 (공개 API)
@@ -62,6 +67,12 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /** BCrypt 비밀번호 해싱 (관리자 비밀번호 저장/비교용, strength 10) */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder(10);
     }
 
     @Bean

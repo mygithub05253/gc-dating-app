@@ -26,16 +26,14 @@ public enum ErrorCode {
     SOCIAL_AUTH_FAILED("A009", HttpStatus.UNAUTHORIZED, "소셜 인증에 실패했습니다."),
     UNSUPPORTED_PROVIDER("A010", HttpStatus.BAD_REQUEST, "지원하지 않는 로그인 방식입니다."),
 
-    // A011 — 사용자: 복구 토큰 / 관리자: 로그인 시도 초과
+    // A011/A012 — 사용자 계정 복구 전용
     RESTORE_TOKEN_INVALID("A011", HttpStatus.UNAUTHORIZED, "유효하지 않은 복구 토큰입니다."),
-    ADMIN_LOGIN_LIMIT("A011", HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다."),
-
-    // A012 — 사용자: 복구 기간 만료 / 관리자: 비활성화 계정
     RESTORE_PERIOD_EXPIRED("A012", HttpStatus.BAD_REQUEST, "계정 복구 가능 기간이 만료되었습니다."),
-    ADMIN_ACCOUNT_INACTIVE("A012", HttpStatus.FORBIDDEN, "비활성화된 계정입니다."),
 
-    // A013 — 관리자 전용
-    ADMIN_ACCOUNT_SUSPENDED("A013", HttpStatus.FORBIDDEN, "정지된 계정입니다."),
+    // A020/A021/A022 — 관리자 전용 (관리자 API 통합명세서 v2.1 §1.1)
+    ADMIN_LOGIN_LIMIT("A020", HttpStatus.TOO_MANY_REQUESTS, "로그인 시도 횟수를 초과했습니다."),
+    ADMIN_ACCOUNT_INACTIVE("A021", HttpStatus.FORBIDDEN, "비활성화된 계정입니다."),
+    ADMIN_ACCOUNT_SUSPENDED("A022", HttpStatus.FORBIDDEN, "정지된 계정입니다."),
 
     // ── 사용자 (U) ──
     NICKNAME_DUPLICATE("U001", HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
