@@ -25,8 +25,9 @@ public class ReportService {
 
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
+    private final ReportPriorityCalculator priorityCalculator;
 
-    /** 사용자 신고 접수 */
+    /** 사용자 신고 접수 — 접수 시점에 우선순위/SLA 자동 산출. */
     @Transactional
     public ReportResponse createReport(Long reporterId, Long targetUserId, ReportRequest request) {
         // 자기 신고 방지
@@ -44,9 +45,14 @@ public class ReportService {
         User targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
+        // 우선순위/SLA 산출
+        ReportPriorityCalculator.PriorityResult priority =
+                priorityCalculator.calculate(reporterId, targetUserId, request.reason());
+
         Report report = Report.create(
                 reporter, targetUser, request.reason(),
-                request.contextType(), request.contextId(), request.detail()
+                request.contextType(), request.contextId(), request.detail(),
+                priority.score(), priority.slaDeadline()
         );
         reportRepository.save(report);
 
@@ -56,8 +62,9 @@ public class ReportService {
             log.warn("[신고] 누적 {}건 도달 — targetUserId={}, 관리자 검토 필요", totalReports, targetUserId);
         }
 
-        log.info("[신고] 접수 완료 — reportId={}, reporter={}, target={}, reason={}",
-                report.getId(), reporterId, targetUserId, request.reason());
+        log.info("[신고] 접수 완료 — reportId={}, reporter={}, target={}, reason={}, priority={}, sla={}",
+                report.getId(), reporterId, targetUserId, request.reason(),
+                priority.score(), priority.slaDeadline());
 
         return ReportResponse.from(report);
     }
