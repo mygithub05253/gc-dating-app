@@ -1877,7 +1877,7 @@ class _MoreTabState extends State<MoreTab> {
             title: const Text('공지사항'), leading: const Icon(Icons.campaign),
             onTap: () async {
               try {
-                final res = await app.dio.get('${app.baseUrl}/api/notices');
+                final res = await app.dio.get('${app.baseUrl}/api/notices', options: app.authHeaders);
                 _showJson('공지사항', res.data['data']);
               } catch (e) { _snack(app.errMsg(e)); }
             },
@@ -1886,7 +1886,7 @@ class _MoreTabState extends State<MoreTab> {
             title: const Text('FAQ'), leading: const Icon(Icons.help),
             onTap: () async {
               try {
-                final res = await app.dio.get('${app.baseUrl}/api/faq');
+                final res = await app.dio.get('${app.baseUrl}/api/faq', options: app.authHeaders);
                 _showJson('FAQ', res.data['data']);
               } catch (e) { _snack(app.errMsg(e)); }
             },
