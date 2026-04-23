@@ -18,6 +18,7 @@ import com.ember.ember.admin.dto.analytics.MatchingFunnelResponse.StageTotals;
 import com.ember.ember.admin.dto.analytics.RetentionSurvivalResponse;
 import com.ember.ember.admin.dto.analytics.SegmentOverviewResponse;
 import com.ember.ember.admin.dto.analytics.UserFunnelResponse;
+import com.ember.ember.admin.dto.analytics.UserSegmentationResponse;
 import com.ember.ember.admin.repository.analytics.AnalyticsAiPerformanceRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsDiaryPatternRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsExchangePatternRepository;
@@ -26,6 +27,7 @@ import com.ember.ember.admin.repository.analytics.AnalyticsJourneyRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsKeywordRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsMatchingDiversityRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsSegmentRepository;
+import com.ember.ember.admin.repository.analytics.AnalyticsSegmentationRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsSurvivalRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsUserFunnelRepository;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +63,7 @@ import java.util.Map;
  *   - §3.12 교환일기 응답률            (B-2.5)
  *   - §3.13 턴→채팅 전환 퍼널         (B-2.6)
  *   - §3.14 사용자 이탈 생존분석 (Kaplan-Meier) (B-2.7)
+ *   - §3.15 사용자 세그먼테이션 (RFM Quintile + K-Means) (B-3)
  *
  * 설계 준수 사항:
  *   - 분모·분자 분리: 일별 포인트는 raw count, 합계에서만 비율 계산.
@@ -84,6 +87,13 @@ public class AdminAnalyticsService {
     private static final int DEFAULT_INACTIVITY_THRESHOLD_DAYS = 30;
     private static final double Z_95 = 1.959963984540054d; // 1.96 approx (φ⁻¹(0.975))
 
+    // B-3 K-Means 튜닝 파라미터
+    private static final int KMEANS_MAX_ITER = 50;
+    private static final double KMEANS_TOLERANCE = 1e-4;
+    private static final long KMEANS_SEED = 42L;
+    private static final int SEGMENTATION_MIN_K = 2;
+    private static final int SEGMENTATION_MAX_K = 10;
+
     private final AnalyticsFunnelRepository funnelRepository;
     private final AnalyticsUserFunnelRepository userFunnelRepository;
     private final AnalyticsKeywordRepository keywordRepository;
@@ -94,6 +104,7 @@ public class AdminAnalyticsService {
     private final AnalyticsDiaryPatternRepository diaryPatternRepository;
     private final AnalyticsExchangePatternRepository exchangePatternRepository;
     private final AnalyticsSurvivalRepository survivalRepository;
+    private final AnalyticsSegmentationRepository segmentationRepository;
 
     // =========================================================================
     // §18.1 매칭 퍼널 (B-1.1)
@@ -724,6 +735,202 @@ public class AdminAnalyticsService {
                         "deactivated_at OR last_login_at < NOW() - " + threshold + "d",
                         true, // user_activity_events 미활용 fallback
                         DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // §3.15 사용자 세그먼테이션 RFM + K-Means (B-3)
+    // =========================================================================
+
+    /**
+     * 사용자 세그먼테이션 — RFM Quintile 과 K-Means Clustering 이중 제공.
+     *
+     * @param method "RFM" | "KMEANS" | "BOTH" (기본 BOTH)
+     * @param k      K-Means 클러스터 수 (2~10 범위, 기본 5)
+     */
+    public UserSegmentationResponse getUserSegmentation(LocalDate startDate,
+                                                        LocalDate endDate,
+                                                        String method,
+                                                        int k) {
+        LocalDate endExclusive = endDate.plusDays(1);
+        String methodUpper = (method == null || method.isBlank())
+                ? "BOTH" : method.toUpperCase(Locale.ROOT);
+        if (!"RFM".equals(methodUpper) && !"KMEANS".equals(methodUpper) && !"BOTH".equals(methodUpper)) {
+            methodUpper = "BOTH";
+        }
+        int safeK = Math.min(Math.max(k, SEGMENTATION_MIN_K), SEGMENTATION_MAX_K);
+
+        // 1) RFE 벡터 추출
+        List<Object[]> rows = segmentationRepository.aggregateRfeVectors(startDate, endExclusive);
+        int n = rows.size();
+        long[] userIds = new long[n];
+        double[][] features = new double[n][3];
+        for (int i = 0; i < n; i++) {
+            Object[] r = rows.get(i);
+            userIds[i] = toLong(r[0]);
+            features[i][0] = nullableDouble(r[1]);  // recency
+            features[i][1] = nullableDouble(r[2]);  // frequency
+            features[i][2] = nullableDouble(r[3]);  // engagement
+        }
+
+        // 2) RFM Quintile
+        UserSegmentationResponse.RfmSummary rfmSummary = null;
+        if ("RFM".equals(methodUpper) || "BOTH".equals(methodUpper)) {
+            rfmSummary = computeRfmQuintile(features);
+        }
+
+        // 3) K-Means
+        UserSegmentationResponse.KMeansSummary kmeansSummary = null;
+        if ("KMEANS".equals(methodUpper) || "BOTH".equals(methodUpper)) {
+            kmeansSummary = computeKMeans(features, safeK);
+        }
+
+        return new UserSegmentationResponse(
+                new UserSegmentationResponse.Period(startDate, endDate, TZ),
+                methodUpper, safeK, n,
+                rfmSummary, kmeansSummary,
+                new UserSegmentationResponse.Meta(
+                        "rfm-quintile + k-means-lloyd",
+                        K_ANON_MIN,
+                        false,
+                        DATA_SOURCE_V2));
+    }
+
+    /**
+     * RFM Quintile 분할 — 각 차원 NTILE(5) → 5개 행동 세그먼트 라벨링.
+     *
+     * 라벨링 규칙 (간소화):
+     *   - CHAMPIONS:  R∈{4,5} AND F∈{4,5} AND E∈{4,5}
+     *   - LOYAL:      F∈{4,5} AND E∈{3,4,5} (CHAMPIONS 제외)
+     *   - PROMISING:  R∈{4,5} (신규·재방문) — CHAMPIONS/LOYAL 제외
+     *   - AT_RISK:    R∈{2,3} AND F∈{3,4,5}
+     *   - LOST:       그 외
+     */
+    private UserSegmentationResponse.RfmSummary computeRfmQuintile(double[][] features) {
+        int n = features.length;
+        int[] rScore = quintileScore(features, 0, /*reverse=*/ true);  // Recency 는 낮을수록 좋음 → 역순
+        int[] fScore = quintileScore(features, 1, /*reverse=*/ false);
+        int[] eScore = quintileScore(features, 2, /*reverse=*/ false);
+
+        java.util.Map<String, long[]> buckets = new java.util.LinkedHashMap<>();
+        buckets.put("CHAMPIONS", new long[]{0});
+        buckets.put("LOYAL",     new long[]{0});
+        buckets.put("PROMISING", new long[]{0});
+        buckets.put("AT_RISK",   new long[]{0});
+        buckets.put("LOST",      new long[]{0});
+
+        double[] sumR = new double[5], sumF = new double[5], sumE = new double[5];
+        String[] labels = {"CHAMPIONS","LOYAL","PROMISING","AT_RISK","LOST"};
+
+        for (int i = 0; i < n; i++) {
+            int r = rScore[i], f = fScore[i], e = eScore[i];
+            int idx;
+            if (r >= 4 && f >= 4 && e >= 4) idx = 0;           // CHAMPIONS
+            else if (f >= 4 && e >= 3)       idx = 1;           // LOYAL
+            else if (r >= 4)                 idx = 2;           // PROMISING
+            else if (r >= 2 && f >= 3)       idx = 3;           // AT_RISK
+            else                              idx = 4;           // LOST
+
+            buckets.get(labels[idx])[0]++;
+            sumR[idx] += features[i][0];
+            sumF[idx] += features[i][1];
+            sumE[idx] += features[i][2];
+        }
+
+        List<UserSegmentationResponse.RfmSegment> segments = new ArrayList<>(5);
+        for (int idx = 0; idx < 5; idx++) {
+            long size = buckets.get(labels[idx])[0];
+            boolean masked = size < K_ANON_MIN;
+            Double avgR = size == 0 ? null : sumR[idx] / size;
+            Double avgF = size == 0 ? null : sumF[idx] / size;
+            Double avgE = size == 0 ? null : sumE[idx] / size;
+            Double share = n > 0 ? (double) size / n : null;
+            segments.add(new UserSegmentationResponse.RfmSegment(
+                    labels[idx], size, masked, avgR, avgF, avgE, share));
+        }
+
+        List<String> notes = List.of(
+                "R(Recency): 마지막 활동 후 경과일 — 낮을수록 높은 점수",
+                "F(Frequency): 기간 내 일기 작성 수",
+                "E(Engagement): 교환일기 × 2 + AI 완료 일기 × 1",
+                "CHAMPIONS: R≥4 AND F≥4 AND E≥4",
+                "LOYAL: F≥4 AND E≥3 (CHAMPIONS 제외)",
+                "PROMISING: R≥4 (신규·재방문, 위 둘 제외)",
+                "AT_RISK: R∈{2,3} AND F≥3",
+                "LOST: 그 외"
+        );
+        return new UserSegmentationResponse.RfmSummary(segments, notes);
+    }
+
+    /**
+     * NTILE(5) 점수 계산 — 각 feature 의 값 정렬 후 5분위로 1~5 점수 부여.
+     *
+     * @param reverse true 면 낮은 값이 높은 점수 (Recency 용)
+     */
+    private static int[] quintileScore(double[][] features, int col, boolean reverse) {
+        int n = features.length;
+        if (n == 0) return new int[0];
+
+        Integer[] indices = new Integer[n];
+        for (int i = 0; i < n; i++) indices[i] = i;
+        java.util.Arrays.sort(indices, (a, b) -> Double.compare(features[a][col], features[b][col]));
+
+        int[] score = new int[n];
+        for (int rank = 0; rank < n; rank++) {
+            int rawScore = 1 + (rank * 5 / Math.max(n, 1)); // 1~5
+            if (rawScore > 5) rawScore = 5;
+            int bucket = reverse ? (6 - rawScore) : rawScore;
+            score[indices[rank]] = bucket;
+        }
+        return score;
+    }
+
+    /**
+     * K-Means 수행 → 클러스터별 요약으로 변환.
+     */
+    private UserSegmentationResponse.KMeansSummary computeKMeans(double[][] features, int k) {
+        KMeansAlgorithm.Result result = KMeansAlgorithm.run(
+                features, k, KMEANS_MAX_ITER, KMEANS_TOLERANCE, KMEANS_SEED);
+
+        int actualK = result.centroidsRaw().length;
+        long[] sizes = new long[actualK];
+        for (int assignment : result.assignments()) sizes[assignment]++;
+
+        List<UserSegmentationResponse.Cluster> clusters = new ArrayList<>(actualK);
+        for (int c = 0; c < actualK; c++) {
+            double[] raw = result.centroidsRaw()[c];
+            double[] z = result.centroidsZ()[c];
+            String label = labelCluster(z);   // Z-score 기반 의미 라벨
+            boolean masked = sizes[c] < K_ANON_MIN;
+
+            clusters.add(new UserSegmentationResponse.Cluster(
+                    c, label, sizes[c], masked,
+                    raw[0], raw[1], raw[2],
+                    z[0],   z[1],   z[2],
+                    result.avgDistancePerCluster()[c]));
+        }
+
+        return new UserSegmentationResponse.KMeansSummary(
+                clusters, result.iterations(), result.inertia(),
+                result.converged(), result.tolerance(), result.seed());
+    }
+
+    /**
+     * K-Means 클러스터의 Z-score centroid 기반 자동 라벨링 휴리스틱.
+     * RFM quintile 과 의미를 맞추되, K-Means 가 다른 K 값을 가질 수 있어 설명형 라벨 부여.
+     */
+    private static String labelCluster(double[] z) {
+        double r = z[0], f = z[1], e = z[2];
+        if (f > 0.5 && e > 0.5 && r < 0)        return "HIGH_ENGAGEMENT";
+        if (f > 0 && e > 0)                     return "ACTIVE";
+        if (r > 0.5 && f < 0)                   return "CHURNING";
+        if (r > 1.0 && f < -0.5 && e < -0.5)    return "DORMANT";
+        if (f < -0.5 && e < -0.5)               return "LOW_ENGAGEMENT";
+        return "BASELINE";
+    }
+
+    private static double nullableDouble(Object o) {
+        Double d = toDouble(o);
+        return d == null ? 0.0 : d;
     }
 
     // =========================================================================

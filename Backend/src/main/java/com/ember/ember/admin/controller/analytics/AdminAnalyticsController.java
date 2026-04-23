@@ -15,6 +15,7 @@ import com.ember.ember.admin.dto.analytics.MatchingFunnelResponse;
 import com.ember.ember.admin.dto.analytics.RetentionSurvivalResponse;
 import com.ember.ember.admin.dto.analytics.SegmentOverviewResponse;
 import com.ember.ember.admin.dto.analytics.UserFunnelResponse;
+import com.ember.ember.admin.dto.analytics.UserSegmentationResponse;
 import com.ember.ember.admin.service.analytics.AdminAnalyticsService;
 import com.ember.ember.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,6 +51,7 @@ import java.util.List;
  *   - §3.12 교환일기 응답률 (getExchangeResponseRate) — B-2.5
  *   - §3.13 턴→채팅 퍼널 (getExchangeTurnFunnel)     — B-2.6
  *   - §3.14 이탈 생존분석 (getRetentionSurvival)       — B-2.7 (Kaplan-Meier)
+ *   - §3.15 사용자 세그먼테이션 (getUserSegmentation)   — B-3 (RFM Quintile + K-Means)
  *
  * 근거 문서:
  *   - docs/md/architecture/analytics/Ember_분석API_데이터설계서_v0.1.md §3.1~§3.2
@@ -328,6 +330,29 @@ public class AdminAnalyticsController {
 
         return ResponseEntity.ok(ApiResponse.success(
                 adminAnalyticsService.getExchangeTurnFunnel(start, end)));
+    }
+
+    // ------------------------------------------------------------------------
+    // §3.15 사용자 세그먼테이션 RFM Quintile + K-Means — B-3
+    // ------------------------------------------------------------------------
+    @GetMapping("/users/segmentation")
+    @Operation(summary = "사용자 세그먼테이션 (RFM + K-Means)",
+            description = "RFE(Recency/Frequency/Engagement) 벡터 기반 이중 세그먼테이션. "
+                    + "method=RFM|KMEANS|BOTH(기본). k 는 K-Means 클러스터 수(2~10, 기본 5). "
+                    + "재현성: seed=42 고정. Inertia 반환으로 Elbow method 지원. 설계서 §3.15.")
+    public ResponseEntity<ApiResponse<UserSegmentationResponse>> getUserSegmentation(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false, defaultValue = "BOTH") String method,
+            @RequestParam(required = false, defaultValue = "5") int k) {
+
+        LocalDate end = endDate != null ? endDate : LocalDate.now();
+        LocalDate start = startDate != null ? startDate : end.minusDays(29);
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getUserSegmentation(start, end, method, k)));
     }
 
     // ------------------------------------------------------------------------
