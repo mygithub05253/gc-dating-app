@@ -157,7 +157,11 @@ public enum ErrorCode {
 
     // §6 콘텐츠 관리
     ADM_TOPIC_WEEK_CONFLICT("ADM020", HttpStatus.CONFLICT, "해당 주에 이미 다른 주제가 등록되어 있습니다."),
-    ADM_EXAMPLE_NOT_FOUND("ADM021", HttpStatus.NOT_FOUND, "존재하지 않는 예제 일기입니다.");
+    ADM_EXAMPLE_NOT_FOUND("ADM021", HttpStatus.NOT_FOUND, "존재하지 않는 예제 일기입니다."),
+
+    // §5.10~5.11 외부 연락처 감지
+    ADM_CONTACT_DETECTION_NOT_FOUND("ADM022", HttpStatus.NOT_FOUND, "존재하지 않는 외부 연락처 감지 항목입니다."),
+    ADM_CONTACT_DETECTION_ALREADY_PROCESSED("ADM023", HttpStatus.BAD_REQUEST, "이미 처리된 감지 항목입니다.");
 
     private final String code;
     private final HttpStatus status;
