@@ -153,7 +153,11 @@ public enum ErrorCode {
 
     // §4 의심 계정 관리
     ADM_SUSPICIOUS_ACCOUNT_NOT_FOUND("ADM018", HttpStatus.NOT_FOUND, "존재하지 않는 의심 계정 항목입니다."),
-    ADM_INVALID_STATUS_TRANSITION("ADM019", HttpStatus.BAD_REQUEST, "허용되지 않은 상태 전이입니다.");
+    ADM_INVALID_STATUS_TRANSITION("ADM019", HttpStatus.BAD_REQUEST, "허용되지 않은 상태 전이입니다."),
+
+    // §6 콘텐츠 관리
+    ADM_TOPIC_WEEK_CONFLICT("ADM020", HttpStatus.CONFLICT, "해당 주에 이미 다른 주제가 등록되어 있습니다."),
+    ADM_EXAMPLE_NOT_FOUND("ADM021", HttpStatus.NOT_FOUND, "존재하지 않는 예제 일기입니다.");
 
     private final String code;
     private final HttpStatus status;

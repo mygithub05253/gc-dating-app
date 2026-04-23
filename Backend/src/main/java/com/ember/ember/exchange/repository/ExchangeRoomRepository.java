@@ -40,4 +40,16 @@ public interface ExchangeRoomRepository extends JpaRepository<ExchangeRoom, Long
             """)
     List<ExchangeRoom> findHistoryByParticipant(
             @Param("userId") Long userId, @Param("cursor") Long cursor, @Param("size") int size);
+
+    // ── 관리자 집계용 (A-4 교환일기 흐름 통계) ─────────────────────────────
+    /** 기간 내 생성된 방 전체 상태 집계 — status 별 카운트용 스트림 조회. */
+    @Query("""
+            SELECT r.status, COUNT(r)
+            FROM ExchangeRoom r
+            WHERE r.createdAt >= :from AND r.createdAt < :to
+            GROUP BY r.status
+            """)
+    List<Object[]> aggregateStatusBetween(
+            @Param("from") java.time.LocalDateTime from,
+            @Param("to") java.time.LocalDateTime to);
 }
