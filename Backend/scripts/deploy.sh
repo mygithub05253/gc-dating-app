@@ -109,10 +109,15 @@ for i in $(seq 1 18); do
 done
 
 # ─────────────────────────────────────────────
-# 5. Nginx — 항상 유지, 설정 변경 시 reload
+# 5. Nginx — Backend 재생성 시 restart (IP 변경 감지)
 # ─────────────────────────────────────────────
-log "Starting nginx..."
-docker compose up -d nginx
+if [ "$BACKEND_CHANGED" -gt 0 ]; then
+  log "Backend 재생성됨 → Nginx restart (upstream DNS 갱신)..."
+  docker compose restart nginx
+else
+  log "Starting nginx..."
+  docker compose up -d nginx
+fi
 
 # ─────────────────────────────────────────────
 # 6. 최종 헬스체크
