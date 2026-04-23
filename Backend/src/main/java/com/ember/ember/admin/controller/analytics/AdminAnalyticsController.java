@@ -2,6 +2,7 @@ package com.ember.ember.admin.controller.analytics;
 
 import com.ember.ember.admin.annotation.AdminOnly;
 import com.ember.ember.admin.dto.analytics.AiPerformanceResponse;
+import com.ember.ember.admin.dto.analytics.AssociationRulesResponse;
 import com.ember.ember.admin.dto.analytics.DiaryEmotionTrendResponse;
 import com.ember.ember.admin.dto.analytics.DiaryLengthQualityResponse;
 import com.ember.ember.admin.dto.analytics.DiaryTimeHeatmapResponse;
@@ -52,6 +53,7 @@ import java.util.List;
  *   - §3.13 턴→채팅 퍼널 (getExchangeTurnFunnel)     — B-2.6
  *   - §3.14 이탈 생존분석 (getRetentionSurvival)       — B-2.7 (Kaplan-Meier)
  *   - §3.15 사용자 세그먼테이션 (getUserSegmentation)   — B-3 (RFM Quintile + K-Means)
+ *   - §3.16 연관 규칙 마이닝 (getDiaryAssociationRules) — B-4 (Apriori)
  *
  * 근거 문서:
  *   - docs/md/architecture/analytics/Ember_분석API_데이터설계서_v0.1.md §3.1~§3.2
@@ -330,6 +332,34 @@ public class AdminAnalyticsController {
 
         return ResponseEntity.ok(ApiResponse.success(
                 adminAnalyticsService.getExchangeTurnFunnel(start, end)));
+    }
+
+    // ------------------------------------------------------------------------
+    // §3.16 연관 규칙 마이닝 Apriori — B-4
+    // ------------------------------------------------------------------------
+    @GetMapping("/diary/association-rules")
+    @Operation(summary = "일기 태그 연관 규칙 마이닝 (Apriori)",
+            description = "일기의 태그 집합(EMOTION/LIFESTYLE/TONE/RELATIONSHIP_STYLE)에서 "
+                    + "support/confidence/lift 임계값을 만족하는 연관 규칙 추출. "
+                    + "minSupport 기본 0.02, minConfidence 0.3, minLift 1.2, maxItemsetSize 3(2~3). "
+                    + "tagTypes 미지정 시 4종 전부 포함. 설계서 §3.16.")
+    public ResponseEntity<ApiResponse<AssociationRulesResponse>> getDiaryAssociationRules(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) List<String> tagTypes,
+            @RequestParam(required = false) Double minSupport,
+            @RequestParam(required = false) Double minConfidence,
+            @RequestParam(required = false) Double minLift,
+            @RequestParam(required = false) Integer maxItemsetSize) {
+
+        LocalDate end = endDate != null ? endDate : LocalDate.now();
+        LocalDate start = startDate != null ? startDate : end.minusDays(29);
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getDiaryAssociationRules(
+                        start, end, tagTypes, minSupport, minConfidence, minLift, maxItemsetSize)));
     }
 
     // ------------------------------------------------------------------------

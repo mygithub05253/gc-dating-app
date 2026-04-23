@@ -1,6 +1,7 @@
 package com.ember.ember.admin.service.analytics;
 
 import com.ember.ember.admin.dto.analytics.AiPerformanceResponse;
+import com.ember.ember.admin.dto.analytics.AssociationRulesResponse;
 import com.ember.ember.admin.dto.analytics.DiaryEmotionTrendResponse;
 import com.ember.ember.admin.dto.analytics.DiaryLengthQualityResponse;
 import com.ember.ember.admin.dto.analytics.DiaryTimeHeatmapResponse;
@@ -20,6 +21,7 @@ import com.ember.ember.admin.dto.analytics.SegmentOverviewResponse;
 import com.ember.ember.admin.dto.analytics.UserFunnelResponse;
 import com.ember.ember.admin.dto.analytics.UserSegmentationResponse;
 import com.ember.ember.admin.repository.analytics.AnalyticsAiPerformanceRepository;
+import com.ember.ember.admin.repository.analytics.AnalyticsAssociationRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsDiaryPatternRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsExchangePatternRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsFunnelRepository;
@@ -41,9 +43,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 관리자 분석 서비스 — 관리자 API v2.1 §18 / 설계서 §3 전반.
@@ -64,6 +68,7 @@ import java.util.Map;
  *   - §3.13 턴→채팅 전환 퍼널         (B-2.6)
  *   - §3.14 사용자 이탈 생존분석 (Kaplan-Meier) (B-2.7)
  *   - §3.15 사용자 세그먼테이션 (RFM Quintile + K-Means) (B-3)
+ *   - §3.16 연관 규칙 마이닝 (Apriori — 감정↔라이프스타일↔톤 동시 출현) (B-4)
  *
  * 설계 준수 사항:
  *   - 분모·분자 분리: 일별 포인트는 raw count, 합계에서만 비율 계산.
@@ -94,6 +99,14 @@ public class AdminAnalyticsService {
     private static final int SEGMENTATION_MIN_K = 2;
     private static final int SEGMENTATION_MAX_K = 10;
 
+    // B-4 Apriori 기본값
+    private static final double APRIORI_DEFAULT_MIN_SUPPORT = 0.02d;
+    private static final double APRIORI_DEFAULT_MIN_CONFIDENCE = 0.30d;
+    private static final double APRIORI_DEFAULT_MIN_LIFT = 1.20d;
+    private static final int APRIORI_DEFAULT_MAX_K = 3;
+    private static final int APRIORI_RULES_LIMIT = 200;
+    private static final int APRIORI_ITEMSETS_LIMIT = 500;
+
     private final AnalyticsFunnelRepository funnelRepository;
     private final AnalyticsUserFunnelRepository userFunnelRepository;
     private final AnalyticsKeywordRepository keywordRepository;
@@ -105,6 +118,7 @@ public class AdminAnalyticsService {
     private final AnalyticsExchangePatternRepository exchangePatternRepository;
     private final AnalyticsSurvivalRepository survivalRepository;
     private final AnalyticsSegmentationRepository segmentationRepository;
+    private final AnalyticsAssociationRepository associationRepository;
 
     // =========================================================================
     // §18.1 매칭 퍼널 (B-1.1)
@@ -931,6 +945,104 @@ public class AdminAnalyticsService {
     private static double nullableDouble(Object o) {
         Double d = toDouble(o);
         return d == null ? 0.0 : d;
+    }
+
+    // =========================================================================
+    // §3.16 연관 규칙 마이닝 Apriori (B-4)
+    // =========================================================================
+
+    /**
+     * 일기 태그 연관 규칙 마이닝.
+     *
+     * @param tagTypes      마이닝에 포함할 tag_type 목록. null/empty 면 전체 tag_type.
+     * @param minSupport    지지도 임계값 (0.001~0.5 범위 클램프)
+     * @param minConfidence 신뢰도 임계값 (0.05~0.99 범위 클램프)
+     * @param minLift       lift 임계값 (1.0~5.0 범위 클램프)
+     * @param maxItemsetSize 탐색 상한 k (2~3)
+     */
+    public AssociationRulesResponse getDiaryAssociationRules(LocalDate startDate,
+                                                             LocalDate endDate,
+                                                             List<String> tagTypes,
+                                                             Double minSupport,
+                                                             Double minConfidence,
+                                                             Double minLift,
+                                                             Integer maxItemsetSize) {
+        LocalDate endExclusive = endDate.plusDays(1);
+        double support = clamp(minSupport == null ? APRIORI_DEFAULT_MIN_SUPPORT : minSupport, 0.001d, 0.5d);
+        double confidence = clamp(minConfidence == null ? APRIORI_DEFAULT_MIN_CONFIDENCE : minConfidence, 0.05d, 0.99d);
+        double lift = clamp(minLift == null ? APRIORI_DEFAULT_MIN_LIFT : minLift, 1.0d, 5.0d);
+        int maxK = Math.min(Math.max(maxItemsetSize == null ? APRIORI_DEFAULT_MAX_K : maxItemsetSize, 2), 3);
+
+        List<String> normalizedTagTypes = (tagTypes == null || tagTypes.isEmpty())
+                ? List.of("EMOTION", "LIFESTYLE", "TONE", "RELATIONSHIP_STYLE")
+                : tagTypes.stream()
+                        .filter(s -> s != null && !s.isBlank())
+                        .map(s -> s.toUpperCase(Locale.ROOT))
+                        .distinct()
+                        .toList();
+
+        // 1) 일기별 태그 집합 구성 (transaction DB)
+        List<Object[]> rows = associationRepository.fetchDiaryTagRows(
+                startDate, endExclusive, normalizedTagTypes);
+        Map<Long, Set<String>> transactions = new HashMap<>();
+        for (Object[] row : rows) {
+            long diaryId = toLong(row[0]);
+            String item = (String) row[1];
+            if (item == null) continue;
+            transactions.computeIfAbsent(diaryId, id -> new HashSet<>()).add(item);
+        }
+        List<Set<String>> txList = new ArrayList<>(transactions.values());
+
+        long totalItemsDistinct = txList.stream()
+                .flatMap(Set::stream)
+                .distinct()
+                .count();
+
+        // 2) Apriori 실행
+        AprioriAlgorithm.Result result = AprioriAlgorithm.run(
+                txList, support, confidence, lift, maxK);
+
+        // 3) DTO 조립
+        List<AssociationRulesResponse.FrequentItemset> frequentItemsets = result.frequentItemsets().entrySet().stream()
+                .map(e -> new AssociationRulesResponse.FrequentItemset(
+                        e.getKey(), e.getValue(),
+                        result.totalTransactions() == 0 ? 0.0 : (double) e.getValue() / result.totalTransactions()))
+                .sorted((a, b) -> {
+                    int c = Integer.compare(a.items().size(), b.items().size());
+                    if (c != 0) return c;
+                    return Double.compare(b.support(), a.support());
+                })
+                .limit(APRIORI_ITEMSETS_LIMIT)
+                .toList();
+
+        List<AssociationRulesResponse.Rule> rules = result.rules().stream()
+                .limit(APRIORI_RULES_LIMIT)
+                .map(r -> new AssociationRulesResponse.Rule(
+                        r.antecedent(), r.consequent(),
+                        r.count(), r.support(), r.confidence(), r.lift()))
+                .toList();
+
+        AssociationRulesResponse.Params params = new AssociationRulesResponse.Params(
+                support, confidence, lift, maxK, normalizedTagTypes);
+
+        AssociationRulesResponse.Stats stats = new AssociationRulesResponse.Stats(
+                result.l1Count(), result.l2Count(), result.l3Count(),
+                result.rules().size(), result.candidatesPruned());
+
+        return new AssociationRulesResponse(
+                new AssociationRulesResponse.Period(startDate, endDate, TZ),
+                result.totalTransactions(),
+                totalItemsDistinct,
+                params,
+                stats,
+                frequentItemsets,
+                rules,
+                new AssociationRulesResponse.Meta(
+                        "apriori", K_ANON_MIN, false, DATA_SOURCE_V2));
+    }
+
+    private static double clamp(double v, double min, double max) {
+        return Math.max(min, Math.min(max, v));
     }
 
     // =========================================================================
