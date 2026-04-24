@@ -7,6 +7,8 @@ import com.ember.ember.chat.domain.Message.MessageType;
 import com.ember.ember.chat.dto.*;
 import com.ember.ember.chat.repository.ChatRoomRepository;
 import com.ember.ember.chat.repository.MessageRepository;
+import com.ember.ember.diary.domain.DiaryKeyword;
+import com.ember.ember.diary.repository.DiaryKeywordRepository;
 import com.ember.ember.exchange.domain.ExchangeRoom;
 import com.ember.ember.exchange.domain.ExchangeRoom.RoomStatus;
 import com.ember.ember.exchange.repository.ExchangeRoomRepository;
@@ -58,6 +60,7 @@ public class ChatService {
     private final ExchangeRoomRepository exchangeRoomRepository;
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final DiaryKeywordRepository diaryKeywordRepository;
     private final StringRedisTemplate redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final ContentScanService contentScanService;
@@ -174,13 +177,23 @@ public class ChatService {
 
         User partner = room.getPartner(userId);
 
+        // AI 성격 태그 조회 (RELATIONSHIP_STYLE 타입 빈도 상위 3개)
+        List<String> personalityTags = diaryKeywordRepository.findByUserId(partner.getId()).stream()
+                .filter(k -> k.getTagType() == DiaryKeyword.TagType.RELATIONSHIP_STYLE)
+                .collect(Collectors.groupingBy(DiaryKeyword::getLabel, Collectors.counting()))
+                .entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(3)
+                .map(Map.Entry::getKey)
+                .toList();
+
         return ChatPartnerProfileResponse.builder()
                 .userId(partner.getId())
                 .nickname(partner.getNickname())
                 .birthDate(partner.getBirthDate() != null ? partner.getBirthDate().toString() : null)
                 .gender(partner.getGender() != null ? partner.getGender().name() : null)
                 .sido(partner.getSido())
-                .personalityTags(List.of()) // TODO: AI 성격 태그 연동
+                .personalityTags(personalityTags)
                 .build();
     }
 

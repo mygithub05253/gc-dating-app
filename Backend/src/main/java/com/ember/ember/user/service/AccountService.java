@@ -1,7 +1,10 @@
 package com.ember.ember.user.service;
 
+import com.ember.ember.cache.service.CacheService;
 import com.ember.ember.chat.repository.ChatRoomRepository;
 import com.ember.ember.consent.repository.AiConsentLogRepository;
+import com.ember.ember.diary.domain.DiaryKeyword;
+import com.ember.ember.diary.repository.DiaryKeywordRepository;
 import com.ember.ember.diary.repository.DiaryRepository;
 import com.ember.ember.exchange.repository.ExchangeRoomRepository;
 import com.ember.ember.global.exception.BusinessException;
@@ -24,8 +27,11 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -41,6 +47,8 @@ public class AccountService {
     private final SanctionHistoryRepository sanctionHistoryRepository;
     private final AppealRepository appealRepository;
     private final DiaryRepository diaryRepository;
+    private final DiaryKeywordRepository diaryKeywordRepository;
+    private final CacheService cacheService;
     private final RedisTemplate<String, String> redisTemplate;
 
     /** 회원 탈퇴 (30일 유예) */
@@ -130,7 +138,7 @@ public class AccountService {
         log.info("[AI 동의 철회] 완료 — userId={}", userId);
     }
 
-    /** AI 프로필 조회 */
+    /** AI 프로필 조회 — Redis 캐시(24h) + DB 폴백 */
     public AiProfileResponse getAiProfile(Long userId) {
         long diaryCount = diaryRepository.countByUserId(userId);
 
@@ -138,13 +146,34 @@ public class AccountService {
             return AiProfileResponse.notAvailable((int) diaryCount);
         }
 
-        // TODO: Redis AI:LIFESTYLE:{userId} 캐시 조회 + DB 조회 연동
-        // 현재는 캐시/분석 결과 미연동 상태이므로 빈 태그 반환
-        return new AiProfileResponse(
-                true, (int) diaryCount,
-                List.of(), List.of(), List.of(), List.of(),
-                null
-        );
+        String cacheKey = "AI:LIFESTYLE:" + userId;
+        return cacheService.getOrLoad(cacheKey, Duration.ofHours(24), () -> {
+            List<DiaryKeyword> keywords = diaryKeywordRepository.findByUserId(userId);
+
+            // 태그 타입별로 그룹핑 → 빈도 상위 3개 추출
+            List<String> personalityTags = extractTopTags(keywords, DiaryKeyword.TagType.RELATIONSHIP_STYLE, 3);
+            List<String> emotionTags = extractTopTags(keywords, DiaryKeyword.TagType.EMOTION, 3);
+            List<String> lifestyleTags = extractTopTags(keywords, DiaryKeyword.TagType.LIFESTYLE, 3);
+            List<String> toneTags = extractTopTags(keywords, DiaryKeyword.TagType.TONE, 3);
+
+            return new AiProfileResponse(
+                    true, (int) diaryCount,
+                    personalityTags, emotionTags, lifestyleTags, toneTags,
+                    null
+            );
+        }, AiProfileResponse.class);
+    }
+
+    /** 키워드 목록에서 특정 태그 타입의 빈도 상위 N개 라벨 추출 */
+    private List<String> extractTopTags(List<DiaryKeyword> keywords, DiaryKeyword.TagType tagType, int limit) {
+        return keywords.stream()
+                .filter(k -> k.getTagType() == tagType)
+                .collect(Collectors.groupingBy(DiaryKeyword::getLabel, Collectors.counting()))
+                .entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(limit)
+                .map(Map.Entry::getKey)
+                .toList();
     }
 
     /** 제재 이의신청 */
