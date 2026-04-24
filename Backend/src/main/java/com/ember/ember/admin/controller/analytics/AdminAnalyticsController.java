@@ -3,6 +3,7 @@ package com.ember.ember.admin.controller.analytics;
 import com.ember.ember.admin.annotation.AdminOnly;
 import com.ember.ember.admin.dto.analytics.AiPerformanceResponse;
 import com.ember.ember.admin.dto.analytics.AssociationRulesResponse;
+import com.ember.ember.admin.dto.analytics.CohortRetentionResponse;
 import com.ember.ember.admin.dto.analytics.DiaryEmotionTrendResponse;
 import com.ember.ember.admin.dto.analytics.DiaryLengthQualityResponse;
 import com.ember.ember.admin.dto.analytics.DiaryTimeHeatmapResponse;
@@ -54,6 +55,7 @@ import java.util.List;
  *   - §3.14 이탈 생존분석 (getRetentionSurvival)       — B-2.7 (Kaplan-Meier)
  *   - §3.15 사용자 세그먼테이션 (getUserSegmentation)   — B-3 (RFM Quintile + K-Means)
  *   - §3.16 연관 규칙 마이닝 (getDiaryAssociationRules) — B-4 (Apriori)
+ *   - §3.17 코호트 리텐션 매트릭스 (getCohortRetention)  — B-5
  *
  * 근거 문서:
  *   - docs/md/architecture/analytics/Ember_분석API_데이터설계서_v0.1.md §3.1~§3.2
@@ -405,5 +407,29 @@ public class AdminAnalyticsController {
 
         return ResponseEntity.ok(ApiResponse.success(
                 adminAnalyticsService.getRetentionSurvival(start, end, inactivityDays)));
+    }
+
+    // ------------------------------------------------------------------------
+    // §3.17 코호트 리텐션 매트릭스 — B-5
+    // ------------------------------------------------------------------------
+    @GetMapping("/users/cohort-retention")
+    @Operation(summary = "코호트 리텐션 매트릭스",
+            description = "주 단위 signup 코호트 × 가입 후 경과 주(week 0..N-1) 리텐션 매트릭스. "
+                    + "활동 정의 = 일기 작성 OR 교환일기 제출. maxWeeks 기본 12 (1~26). "
+                    + "관측 미완료 셀은 null (공정 비교 보장). Amplitude/Mixpanel 스타일 Retention Curve. "
+                    + "설계서 §3.17.")
+    public ResponseEntity<ApiResponse<CohortRetentionResponse>> getCohortRetention(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false, defaultValue = "12") int maxWeeks) {
+
+        LocalDate end = endDate != null ? endDate : LocalDate.now();
+        // 기본: 최근 12주 signup 코호트
+        LocalDate start = startDate != null ? startDate : end.minusWeeks(12);
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getCohortRetention(start, end, maxWeeks)));
     }
 }

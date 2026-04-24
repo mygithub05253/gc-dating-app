@@ -2,6 +2,7 @@ package com.ember.ember.admin.service.analytics;
 
 import com.ember.ember.admin.dto.analytics.AiPerformanceResponse;
 import com.ember.ember.admin.dto.analytics.AssociationRulesResponse;
+import com.ember.ember.admin.dto.analytics.CohortRetentionResponse;
 import com.ember.ember.admin.dto.analytics.DiaryEmotionTrendResponse;
 import com.ember.ember.admin.dto.analytics.DiaryLengthQualityResponse;
 import com.ember.ember.admin.dto.analytics.DiaryTimeHeatmapResponse;
@@ -22,6 +23,7 @@ import com.ember.ember.admin.dto.analytics.UserFunnelResponse;
 import com.ember.ember.admin.dto.analytics.UserSegmentationResponse;
 import com.ember.ember.admin.repository.analytics.AnalyticsAiPerformanceRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsAssociationRepository;
+import com.ember.ember.admin.repository.analytics.AnalyticsCohortRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsDiaryPatternRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsExchangePatternRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsFunnelRepository;
@@ -42,8 +44,10 @@ import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -69,6 +73,7 @@ import java.util.Set;
  *   - §3.14 사용자 이탈 생존분석 (Kaplan-Meier) (B-2.7)
  *   - §3.15 사용자 세그먼테이션 (RFM Quintile + K-Means) (B-3)
  *   - §3.16 연관 규칙 마이닝 (Apriori — 감정↔라이프스타일↔톤 동시 출현) (B-4)
+ *   - §3.17 코호트 리텐션 매트릭스 (Weekly signup × week_offset 활동 비율) (B-5)
  *
  * 설계 준수 사항:
  *   - 분모·분자 분리: 일별 포인트는 raw count, 합계에서만 비율 계산.
@@ -107,6 +112,11 @@ public class AdminAnalyticsService {
     private static final int APRIORI_RULES_LIMIT = 200;
     private static final int APRIORI_ITEMSETS_LIMIT = 500;
 
+    // B-5 Cohort Retention 기본값
+    private static final int COHORT_DEFAULT_MAX_WEEKS = 12;
+    private static final int COHORT_MIN_WEEKS = 1;
+    private static final int COHORT_MAX_WEEKS = 26;
+
     private final AnalyticsFunnelRepository funnelRepository;
     private final AnalyticsUserFunnelRepository userFunnelRepository;
     private final AnalyticsKeywordRepository keywordRepository;
@@ -119,6 +129,7 @@ public class AdminAnalyticsService {
     private final AnalyticsSurvivalRepository survivalRepository;
     private final AnalyticsSegmentationRepository segmentationRepository;
     private final AnalyticsAssociationRepository associationRepository;
+    private final AnalyticsCohortRepository cohortRepository;
 
     // =========================================================================
     // §18.1 매칭 퍼널 (B-1.1)
@@ -1043,6 +1054,101 @@ public class AdminAnalyticsService {
 
     private static double clamp(double v, double min, double max) {
         return Math.max(min, Math.min(max, v));
+    }
+
+    // =========================================================================
+    // §3.17 코호트 리텐션 매트릭스 (B-5)
+    // =========================================================================
+
+    /**
+     * 주 단위 signup 코호트 × 가입 후 경과 주 별 리텐션 매트릭스.
+     *
+     * 설계 개요:
+     *   - cohort_week          : DATE_TRUNC('week', created_at AT TIME ZONE 'Asia/Seoul') (월요일)
+     *   - activity             : diaries.created_at OR exchange_diaries.submitted_at
+     *   - week_offset          : FLOOR((activity_at - cohort_week 월요일 00:00 KST) / 7days)
+     *   - retained[offset]     : 해당 코호트 중 week_offset 에 활동한 DISTINCT user 수
+     *   - rate                 : retained / cohort_size
+     *   - observable           : (cohort_week + (offset+1)*7) <= today. 미관측 셀은 null.
+     *
+     * averageByWeek: 관측 가능한 코호트만 평균에 포함 (maturity bias 방지).
+     */
+    public CohortRetentionResponse getCohortRetention(LocalDate startDate,
+                                                      LocalDate endDate,
+                                                      int maxWeeks) {
+        LocalDate endExclusive = endDate.plusDays(1);
+        int safeMaxWeeks = Math.min(Math.max(maxWeeks, COHORT_MIN_WEEKS), COHORT_MAX_WEEKS);
+
+        // 1) 코호트 크기 (signup_week -> size)
+        Map<LocalDate, Long> cohortSizes = new LinkedHashMap<>();
+        for (Object[] r : cohortRepository.aggregateCohortSizes(startDate, endExclusive)) {
+            cohortSizes.put(toLocalDate(r[0]), toLong(r[1]));
+        }
+
+        // 2) 코호트×offset -> retained
+        Map<LocalDate, Map<Integer, Long>> retentionMap = new HashMap<>();
+        for (Object[] r : cohortRepository.aggregateRetentionCounts(
+                startDate, endExclusive, safeMaxWeeks)) {
+            LocalDate cw = toLocalDate(r[0]);
+            int offset = (int) toLong(r[1]);
+            long retained = toLong(r[2]);
+            retentionMap.computeIfAbsent(cw, k -> new HashMap<>()).put(offset, retained);
+        }
+
+        // 3) 매트릭스 조립 + 관측 가능 체크 + 평균 누적
+        LocalDate today = LocalDate.now();
+        double[] avgSum = new double[safeMaxWeeks];
+        int[] observableCnt = new int[safeMaxWeeks];
+        List<CohortRetentionResponse.CohortRow> rows = new ArrayList<>(cohortSizes.size());
+
+        for (Map.Entry<LocalDate, Long> e : cohortSizes.entrySet()) {
+            LocalDate cw = e.getKey();
+            long size = e.getValue();
+            Map<Integer, Long> retained = retentionMap.getOrDefault(cw, Collections.emptyMap());
+
+            List<CohortRetentionResponse.RetentionCell> cells = new ArrayList<>(safeMaxWeeks);
+            for (int offset = 0; offset < safeMaxWeeks; offset++) {
+                // 주 구간이 today 까지 완전히 경과했는지: cohort_week + (offset+1)*7 <= today
+                LocalDate weekEnd = cw.plusWeeks(offset + 1L);
+                boolean observable = !weekEnd.isAfter(today);
+                Long retainedCount = observable ? retained.getOrDefault(offset, 0L) : null;
+                Double rate = (observable && size > 0)
+                        ? (double) retainedCount / (double) size : null;
+                cells.add(new CohortRetentionResponse.RetentionCell(
+                        offset, retainedCount, rate, observable));
+                if (rate != null) {
+                    avgSum[offset] += rate;
+                    observableCnt[offset]++;
+                }
+            }
+            rows.add(new CohortRetentionResponse.CohortRow(
+                    cw, cw.plusDays(6), size, cells));
+        }
+
+        // 4) 주차별 평균 리텐션 곡선
+        List<CohortRetentionResponse.AverageByWeek> avgList = new ArrayList<>(safeMaxWeeks);
+        for (int i = 0; i < safeMaxWeeks; i++) {
+            Double avgRate = observableCnt[i] > 0 ? avgSum[i] / observableCnt[i] : null;
+            avgList.add(new CohortRetentionResponse.AverageByWeek(
+                    i, avgRate, observableCnt[i]));
+        }
+
+        long totalCohortUsers = cohortSizes.values().stream()
+                .mapToLong(Long::longValue).sum();
+
+        // degraded: 데이터가 없거나 전부 미관측인 경우
+        boolean degraded = rows.isEmpty()
+                || java.util.Arrays.stream(observableCnt).allMatch(c -> c == 0);
+
+        return new CohortRetentionResponse(
+                new CohortRetentionResponse.Period(startDate, endDate, TZ),
+                safeMaxWeeks,
+                cohortSizes.size(),
+                totalCohortUsers,
+                rows,
+                avgList,
+                new CohortRetentionResponse.Meta(
+                        "cohort-retention-weekly", degraded, DATA_SOURCE_V2));
     }
 
     // =========================================================================
