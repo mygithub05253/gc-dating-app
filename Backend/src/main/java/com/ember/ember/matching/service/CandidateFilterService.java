@@ -1,5 +1,7 @@
 package com.ember.ember.matching.service;
 
+import com.ember.ember.exchange.repository.ExchangeRoomRepository;
+import com.ember.ember.matching.repository.MatchingPassRepository;
 import com.ember.ember.user.domain.User;
 import com.ember.ember.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -9,10 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * 매칭 후보 사용자 필터링 서비스 (M4 초기 구현).
+ * 매칭 후보 사용자 필터링 서비스.
  *
  * 필터 조건:
  *   1. 이성 (gender 반전)
@@ -21,9 +25,9 @@ import java.util.List;
  *   4. ACTIVE 상태
  *   5. 자기 자신 제외
  *   6. MatchingExclusion(차단/종료) 제외
+ *   7. 교환일기 ACTIVE 3건 이상인 유저 제외 (명세서 §5.4 최대 3건)
+ *   8. MatchingPass(7일 이내 skip) 대상 유저 제외
  *
- * TODO(M5): 현재 교환일기 진행 중인 사용자 제외 (exchange_rooms ACTIVE 상태 기준)
- * TODO(M5): MatchingPass(패스) 이력 반영
  * TODO(M6): 지역 선호, 활동 점수 기반 가중 필터링 추가
  */
 @Slf4j
@@ -34,8 +38,11 @@ public class CandidateFilterService {
     private static final int CANDIDATE_LIMIT = 50;
     private static final int AGE_RANGE_YEARS = 5;
     private static final int ACTIVE_DAYS_THRESHOLD = 7;
+    private static final int SKIP_EXCLUSION_DAYS = 7;
 
     private final UserRepository userRepository;
+    private final ExchangeRoomRepository exchangeRoomRepository;
+    private final MatchingPassRepository matchingPassRepository;
 
     /**
      * 기준 사용자에 대한 매칭 후보 ID 목록을 반환한다.
@@ -45,20 +52,16 @@ public class CandidateFilterService {
      */
     @Transactional(readOnly = true)
     public List<Long> findCandidates(User currentUser) {
-        // 이성 조건: 기준 사용자 성별 반전
         User.Gender oppositeGender = (currentUser.getGender() == User.Gender.MALE)
                 ? User.Gender.FEMALE
                 : User.Gender.MALE;
 
-        // 연령 범위 계산 (±5세 birthDate 기준)
-        // 기준 사용자 생년 ± 5년
         LocalDate baseDate = currentUser.getBirthDate();
-        LocalDate minBirthDate = baseDate.minusYears(AGE_RANGE_YEARS);   // 더 나이 많은 쪽
-        LocalDate maxBirthDate = baseDate.plusYears(AGE_RANGE_YEARS);    // 더 어린 쪽
-
-        // 최근 활동 7일 이내 기준 시각
+        LocalDate minBirthDate = baseDate.minusYears(AGE_RANGE_YEARS);
+        LocalDate maxBirthDate = baseDate.plusYears(AGE_RANGE_YEARS);
         LocalDateTime activeThreshold = LocalDateTime.now().minusDays(ACTIVE_DAYS_THRESHOLD);
 
+        // 1차: DB 쿼리 기본 필터 (이성/연령/활동/차단)
         List<Long> candidates = userRepository.findCandidateUserIds(
                 currentUser.getId(),
                 oppositeGender,
@@ -68,8 +71,27 @@ public class CandidateFilterService {
                 CANDIDATE_LIMIT
         );
 
-        log.debug("[CandidateFilter] userId={}, 후보 {}명 필터링 완료 (이성={}, 연령±{}세, 활동{}일내)",
-                currentUser.getId(), candidates.size(), oppositeGender, AGE_RANGE_YEARS, ACTIVE_DAYS_THRESHOLD);
+        if (candidates.isEmpty()) {
+            return candidates;
+        }
+
+        // 2차: 교환일기 ACTIVE 3건 이상인 유저 제외
+        Set<Long> excludeIds = new HashSet<>(
+                exchangeRoomRepository.findUserIdsWithMaxActiveRooms(candidates));
+
+        // 3차: MatchingPass 7일 이내 skip한 유저 제외
+        LocalDateTime skipSince = LocalDateTime.now().minusDays(SKIP_EXCLUSION_DAYS);
+        excludeIds.addAll(matchingPassRepository.findSkippedUserIdsSince(
+                currentUser.getId(), skipSince));
+
+        if (!excludeIds.isEmpty()) {
+            candidates = candidates.stream()
+                    .filter(id -> !excludeIds.contains(id))
+                    .toList();
+        }
+
+        log.debug("[CandidateFilter] userId={}, 최종 후보 {}명 (제외 {}명)",
+                currentUser.getId(), candidates.size(), excludeIds.size());
 
         return candidates;
     }

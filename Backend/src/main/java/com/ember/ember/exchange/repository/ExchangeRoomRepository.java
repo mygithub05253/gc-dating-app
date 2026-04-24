@@ -48,6 +48,19 @@ public interface ExchangeRoomRepository extends JpaRepository<ExchangeRoom, Long
     List<ExchangeRoom> findHistoryByParticipant(
             @Param("userId") Long userId, @Param("cursor") Long cursor, @Param("size") int size);
 
+    /** 특정 유저 목록 중 ACTIVE 교환방이 3건 이상인 유저 ID 조회 (매칭 필터용) */
+    @Query("""
+            SELECT u_id FROM (
+                SELECT CASE WHEN r.userA.id IN :userIds THEN r.userA.id ELSE r.userB.id END AS u_id
+                FROM ExchangeRoom r
+                WHERE r.status = 'ACTIVE'
+                  AND (r.userA.id IN :userIds OR r.userB.id IN :userIds)
+            ) sub
+            GROUP BY u_id
+            HAVING COUNT(*) >= 3
+            """)
+    List<Long> findUserIdsWithMaxActiveRooms(@Param("userIds") List<Long> userIds);
+
     // ── 관리자 집계용 (A-4 교환일기 흐름 통계) ─────────────────────────────
     /** 기간 내 생성된 방 전체 상태 집계 — status 별 카운트용 스트림 조회. */
     @Query("""

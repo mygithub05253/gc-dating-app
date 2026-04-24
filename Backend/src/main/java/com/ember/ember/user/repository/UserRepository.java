@@ -51,8 +51,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
      *   5. 자기 자신 제외
      *   6. 매칭 제외 목록(MatchingExclusion) 제외
      *
-     * TODO(M5): 이미 매칭 진행 중인 사용자 제외 (exchange_rooms 테이블 기준)
-     * TODO(M5): MatchingPass(패스한 사용자) 제외 로직 추가
+     * 교환 3건 이상 + MatchingPass 제외는 CandidateFilterService에서 후처리.
      * TODO(M6): 후보 필터링 정교화 (지역 선호, 활동 점수 기반 우선순위)
      */
     @Query("""
