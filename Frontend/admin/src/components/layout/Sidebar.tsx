@@ -113,6 +113,7 @@ const navItems: NavItem[] = [
       { title: '일기 패턴', href: '/admin/analytics/diaries' },
       { title: '퍼널 분석', href: '/admin/analytics/funnel' },
       { title: '이탈 생존분석 (KM)', href: '/admin/analytics/survival' },
+      { title: '세그먼테이션 (RFM·K-Means)', href: '/admin/analytics/segmentation' },
     ],
   },
   {
