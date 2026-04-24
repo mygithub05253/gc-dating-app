@@ -115,6 +115,7 @@ const navItems: NavItem[] = [
       { title: '일기 길이·품질', href: '/admin/analytics/diaries/quality' },
       { title: '일기 감정 추이', href: '/admin/analytics/diaries/emotion' },
       { title: '일기 주제 참여', href: '/admin/analytics/diaries/topic' },
+      { title: '교환 응답률', href: '/admin/analytics/diaries/response' },
       { title: '퍼널 분석', href: '/admin/analytics/funnel' },
       { title: '키워드 분석', href: '/admin/analytics/keywords' },
       { title: '퍼널 심화', href: '/admin/analytics/funnel-deep' },
