@@ -57,6 +57,18 @@ export function useAnalysisOverview() {
   });
 }
 
+// AI 동의 미동의 사용자 목록 (페이지네이션)
+export function useConsentMissingUsers(params: {
+  page: number;
+  size: number;
+  filter: 'NO_AI_ANALYSIS' | 'NO_MATCHING';
+}) {
+  return useQuery({
+    queryKey: ['monitoring', 'consent', 'missing-users', params],
+    queryFn: () => monitoringApi.getConsentMissingUsers(params).then((res) => res.data.data),
+  });
+}
+
 // ─── SUPER_ADMIN 액션 mutation ─────────────────────────────────────────────
 
 export function useReprocessDlq() {

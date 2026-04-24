@@ -5,7 +5,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/layout/PageHeader';
-import MockPageNotice from '@/components/common/MockPageNotice';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,8 +61,6 @@ export default function PasswordChangePage() {
         title="비밀번호 변경"
         description="현재 비밀번호를 확인 후 새 비밀번호로 변경합니다"
       />
-
-      <MockPageNotice message="백엔드 연결 대기 중 — Mock 모드에서 강도 검사는 동작합니다" />
 
       <div className="max-w-md">
         <Card>
