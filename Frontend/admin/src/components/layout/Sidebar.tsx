@@ -115,6 +115,7 @@ const navItems: NavItem[] = [
       { title: '이탈 생존분석 (KM)', href: '/admin/analytics/survival' },
       { title: '세그먼테이션 (RFM·K-Means)', href: '/admin/analytics/segmentation' },
       { title: '연관규칙 (Apriori)', href: '/admin/analytics/associations' },
+      { title: '코호트 리텐션 매트릭스', href: '/admin/analytics/cohort' },
     ],
   },
   {
