@@ -24,6 +24,7 @@ yarn-error.log*
 target/
 .gradle/
 build/
+bin/
 
 # Firebase (민감 정보)
 firebase-service-account.json
