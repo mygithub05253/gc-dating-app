@@ -3,6 +3,7 @@ package com.ember.ember.aireport.service;
 import com.ember.ember.aireport.domain.ExchangeReport;
 import com.ember.ember.aireport.repository.ExchangeReportRepository;
 import com.ember.ember.cache.service.CacheService;
+import com.ember.ember.global.notification.FcmService;
 import com.ember.ember.messaging.event.AiAnalysisResultEvent;
 import com.ember.ember.messaging.event.AiAnalysisResultEvent.ExchangeResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -41,6 +42,7 @@ public class ExchangeReportResultHandler {
 
     private final ExchangeReportRepository exchangeReportRepository;
     private final CacheService cacheService;
+    private final FcmService fcmService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -109,9 +111,11 @@ public class ExchangeReportResultHandler {
                  "emotionSimilarity={}, writingTempA={}, writingTempB={}",
                 reportId, event.roomId(), emotionSimilarity, writingTempA, writingTempB);
 
-        // 6. FCM 푸시 알림 — TODO(M7): 양측 사용자에게 리포트 완성 알림 발송
-        //    FcmService.sendToUser(report.getRoom().getUserA().getId(), "교환일기 리포트가 완성됐어요!");
-        //    FcmService.sendToUser(report.getRoom().getUserB().getId(), "교환일기 리포트가 완성됐어요!");
+        // 6. FCM 푸시 알림 — 양측 사용자에게 리포트 완성 알림
+        fcmService.sendPushToUser(report.getRoom().getUserA().getId(),
+                "공통점 리포트가 완성됐어요!", "교환일기 리포트를 확인해 보세요.");
+        fcmService.sendPushToUser(report.getRoom().getUserB().getId(),
+                "공통점 리포트가 완성됐어요!", "교환일기 리포트를 확인해 보세요.");
     }
 
     /**

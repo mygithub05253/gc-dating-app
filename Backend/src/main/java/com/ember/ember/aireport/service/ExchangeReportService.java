@@ -3,6 +3,7 @@ package com.ember.ember.aireport.service;
 import com.ember.ember.aireport.domain.ExchangeReport;
 import com.ember.ember.aireport.repository.ExchangeReportRepository;
 import com.ember.ember.consent.service.AiConsentService;
+import com.ember.ember.global.notification.FcmService;
 import com.ember.ember.exchange.domain.ExchangeDiary;
 import com.ember.ember.exchange.domain.ExchangeDiary.ExchangeDiaryStatus;
 import com.ember.ember.exchange.domain.ExchangeRoom;
@@ -56,6 +57,7 @@ public class ExchangeReportService {
     private final ExchangeDiaryRepository exchangeDiaryRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final AiConsentService aiConsentService;
+    private final FcmService fcmService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -102,9 +104,15 @@ public class ExchangeReportService {
             log.info("[ExchangeReportService] 2-party 동의 미획득 — CONSENT_REQUIRED 저장 " +
                      "roomId={}, consentA={}, consentB={}", roomId, consentA, consentB);
 
-            // TODO(M7): 동의 요청 FCM 푸시 알림 발송
-            //   - 미동의 사용자(userAId 또는 userBId)에게 AI 동의 요청 알림 발송
-            //   - 동의 완료 시 CONSENT_REQUIRED → PROCESSING 재트리거 로직 추가 필요
+            // 미동의 사용자에게 AI 동의 요청 FCM 발송
+            if (!consentA) {
+                fcmService.sendPushToUser(userAId,
+                        "AI 분석 동의가 필요해요", "교환일기 공통점 리포트를 받으려면 AI 분석에 동의해 주세요.");
+            }
+            if (!consentB) {
+                fcmService.sendPushToUser(userBId,
+                        "AI 분석 동의가 필요해요", "교환일기 공통점 리포트를 받으려면 AI 분석에 동의해 주세요.");
+            }
             return;
         }
 

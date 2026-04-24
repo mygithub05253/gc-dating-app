@@ -10,6 +10,7 @@ import com.ember.ember.diary.repository.DiaryKeywordRepository;
 import com.ember.ember.diary.repository.DiaryRepository;
 import com.ember.ember.diary.repository.UserActivityEventRepository;
 import com.ember.ember.messaging.event.AiAnalysisResultEvent;
+import com.ember.ember.global.notification.FcmService;
 import com.ember.ember.messaging.outbox.repository.OutboxEventRepository;
 import com.ember.ember.user.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,6 +46,7 @@ public class DiaryAnalysisResultHandler {
     private final CacheService cacheService;
     private final ObjectMapper objectMapper;
     private final LifestyleAnalysisService lifestyleAnalysisService;
+    private final FcmService fcmService;
 
     /**
      * AI 분석 완료 처리.
@@ -107,7 +109,9 @@ public class DiaryAnalysisResultHandler {
         // 6. 라이프스타일 분석 트리거 (LifestyleAnalysisService: COMPLETED ≥ 5 + 24h 중복방지)
         lifestyleAnalysisService.triggerIfEligible(userId);
 
-        // 7. FCM 푸시 — TODO(M7): 관측성/알림 마일스톤에서 구현
+        // 7. FCM 푸시 — AI 분석 완료 알림
+        fcmService.sendPushToUser(userId, "AI 분석이 완료됐어요!", "일기의 성격·감정 분석 결과를 확인해 보세요.");
+
         log.info("[DiaryAnalysisResultHandler] 분석 완료 처리 성공 — diaryId={}, userId={}", diaryId, userId);
     }
 
