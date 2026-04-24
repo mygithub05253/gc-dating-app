@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import PageHeader from '@/components/layout/PageHeader';
-import MockPageNotice from '@/components/common/MockPageNotice';
 import KpiCard from '@/components/common/KpiCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,109 +23,92 @@ import {
   Line,
   Legend,
 } from 'recharts';
+import { useKeywordTop } from '@/hooks/useAnalytics';
+import {
+  AnalyticsLoading,
+  AnalyticsError,
+  AnalyticsEmpty,
+  DegradedBadge,
+} from '@/components/common/AnalyticsStatus';
+import { periodToDateRange, type AnalyticsPeriod } from '@/lib/utils/analyticsRange';
+import type { KeywordItem, KeywordTagType, KeywordTopResponse } from '@/types/analytics';
 
-// ─── 기간 필터 타입 ───────────────────────────────────────────
-type Period = '7d' | '30d' | '90d';
-
-// ─── 카테고리 색상 팔레트 ─────────────────────────────────────
-const CATEGORY_COLORS: Record<string, string> = {
-  감정: '#3b82f6',
-  일상: '#60a5fa',
-  관심사: '#93c5fd',
-  가치관: '#bfdbfe',
-  취향: '#dbeafe',
+// ─── 카테고리(tagType) 색상 팔레트 ─────────────────────────────
+// BE의 KeywordTagType: EMOTION / LIFESTYLE / RELATIONSHIP_STYLE / TONE / ALL
+const TAG_TYPE_COLORS: Record<string, string> = {
+  EMOTION: '#3b82f6',
+  LIFESTYLE: '#60a5fa',
+  RELATIONSHIP_STYLE: '#93c5fd',
+  TONE: '#bfdbfe',
+  ALL: '#dbeafe',
 };
 
-// ─── Mock: 키워드 Top 30 ──────────────────────────────────────
-const MOCK_KEYWORDS = [
-  { rank: 1,  keyword: '운동',   category: '일상',  frequency: 1547, changeRate: +12.3 },
-  { rank: 2,  keyword: '독서',   category: '취향',  frequency: 1382, changeRate: +8.1  },
-  { rank: 3,  keyword: '여행',   category: '관심사', frequency: 1290, changeRate: +15.7 },
-  { rank: 4,  keyword: '카페',   category: '일상',  frequency: 1175, changeRate: -2.4  },
-  { rank: 5,  keyword: '영화',   category: '취향',  frequency: 1098, changeRate: +5.0  },
-  { rank: 6,  keyword: '음악',   category: '취향',  frequency: 1043, changeRate: +9.2  },
-  { rank: 7,  keyword: '요리',   category: '관심사', frequency: 987,  changeRate: +3.8  },
-  { rank: 8,  keyword: '산책',   category: '일상',  frequency: 934,  changeRate: -1.1  },
-  { rank: 9,  keyword: '친구',   category: '일상',  frequency: 891,  changeRate: +6.5  },
-  { rank: 10, keyword: '가족',   category: '가치관', frequency: 856,  changeRate: +4.2  },
-  { rank: 11, keyword: '글쓰기', category: '관심사', frequency: 812,  changeRate: +18.4 },
-  { rank: 12, keyword: '일',     category: '일상',  frequency: 778,  changeRate: -3.6  },
-  { rank: 13, keyword: '공부',   category: '일상',  frequency: 743,  changeRate: +2.1  },
-  { rank: 14, keyword: '감사',   category: '감정',  frequency: 712,  changeRate: +11.0 },
-  { rank: 15, keyword: '행복',   category: '감정',  frequency: 689,  changeRate: +7.3  },
-  { rank: 16, keyword: '건강',   category: '가치관', frequency: 651,  changeRate: +14.6 },
-  { rank: 17, keyword: '성장',   category: '가치관', frequency: 623,  changeRate: +20.1 },
-  { rank: 18, keyword: '자연',   category: '관심사', frequency: 598,  changeRate: -0.8  },
-  { rank: 19, keyword: '예술',   category: '취향',  frequency: 572,  changeRate: +9.9  },
-  { rank: 20, keyword: '기술',   category: '관심사', frequency: 548,  changeRate: +16.3 },
-  { rank: 21, keyword: '명상',   category: '가치관', frequency: 521,  changeRate: +22.5 },
-  { rank: 22, keyword: '게임',   category: '취향',  frequency: 498,  changeRate: -4.2  },
-  { rank: 23, keyword: '드라마', category: '취향',  frequency: 476,  changeRate: +1.7  },
-  { rank: 24, keyword: '사랑',   category: '감정',  frequency: 453,  changeRate: +8.8  },
-  { rank: 25, keyword: '설레임', category: '감정',  frequency: 431,  changeRate: +13.4 },
-  { rank: 26, keyword: '봉사',   category: '가치관', frequency: 408,  changeRate: +5.9  },
-  { rank: 27, keyword: '카메라', category: '관심사', frequency: 389,  changeRate: +7.1  },
-  { rank: 28, keyword: '반려동물', category: '일상', frequency: 372,  changeRate: +19.8 },
-  { rank: 29, keyword: '뮤지컬', category: '취향',  frequency: 354,  changeRate: -1.5  },
-  { rank: 30, keyword: '등산',   category: '관심사', frequency: 341,  changeRate: +10.2 },
-];
+const TAG_TYPE_LABELS: Record<string, string> = {
+  EMOTION: '감정',
+  LIFESTYLE: '라이프스타일',
+  RELATIONSHIP_STYLE: '관계',
+  TONE: '톤',
+  ALL: '전체',
+};
 
-// ─── Mock: BarChart Top 20 ────────────────────────────────────
-const BAR_DATA = MOCK_KEYWORDS.slice(0, 20).map(k => ({
-  keyword: k.keyword,
-  빈도: k.frequency,
-}));
+const TAG_TYPE_OPTIONS: KeywordTagType[] = ['ALL', 'EMOTION', 'LIFESTYLE', 'RELATIONSHIP_STYLE', 'TONE'];
 
-// ─── Mock: 카테고리 분포 PieChart ─────────────────────────────
-const PIE_DATA = Object.entries(
-  MOCK_KEYWORDS.reduce<Record<string, number>>((acc, k) => {
+// ─── BE 응답 → 차트별 adapter ──────────────────────────────────
+function adaptItems(items: KeywordItem[]) {
+  return items.map((it, idx) => ({
+    rank: idx + 1,
+    keyword: it.label,
+    category: TAG_TYPE_LABELS[it.tagType] ?? it.tagType,
+    tagType: it.tagType,
+    frequency: it.count,
+    diaryCount: it.diaryCount,
+    userCount: it.userCount,
+    share: it.share ?? 0,
+    masked: it.masked,
+  }));
+}
+
+function buildBarData(rows: ReturnType<typeof adaptItems>) {
+  return rows.slice(0, 20).map((k) => ({ keyword: k.keyword, 빈도: k.frequency }));
+}
+
+function buildPieData(rows: ReturnType<typeof adaptItems>) {
+  const grouped = rows.reduce<Record<string, number>>((acc, k) => {
     acc[k.category] = (acc[k.category] ?? 0) + k.frequency;
     return acc;
-  }, {}),
-).map(([name, value]) => ({ name, value }));
+  }, {});
+  return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+}
 
-// ─── Mock: 트렌드 LineChart (최근 7일 Top 5) ─────────────────
-const TREND_DATES = ['04-18', '04-19', '04-20', '04-21', '04-22', '04-23', '04-24'];
-const TOP5_KEYWORDS = ['운동', '독서', '여행', '카페', '영화'];
+// 트렌드는 BE에서 미제공 — 현재 응답 기준 정적 표시 (placeholder).
+// 실 트렌드 API가 추가되기 전까지 Top5 키워드 단일 시점 막대로 보여준다.
+function buildTrendData(rows: ReturnType<typeof adaptItems>) {
+  const top5 = rows.slice(0, 5);
+  return [{ date: '현재', ...Object.fromEntries(top5.map((k) => [k.keyword, k.frequency])) }];
+}
 
 const TREND_LINE_COLORS = ['#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#1d4ed8'];
 
-const MOCK_TREND_DATA = TREND_DATES.map((date, i) => {
-  const base = [1547, 1382, 1290, 1175, 1098];
-  const noise = [
-    [0, -30, 20, -10, 40, 15, -5],
-    [0, 10, -20, 30, -5, 25, -15],
-    [0, 20, 10, -30, 50, -10, 35],
-    [0, -15, 5, 20, -25, 10, -5],
-    [0, 5, -10, 15, 20, -8, 12],
-  ];
-  return {
-    date,
-    ...Object.fromEntries(TOP5_KEYWORDS.map((kw, ki) => [kw, base[ki] + noise[ki][i]])),
-  };
-});
-
-// ─── KPI 상수 ─────────────────────────────────────────────────
-const TOTAL_KEYWORDS = MOCK_KEYWORDS.length;
-const TOP1_KEYWORD = MOCK_KEYWORDS[0].keyword;
-const AVG_FREQUENCY = Math.round(
-  MOCK_KEYWORDS.reduce((s, k) => s + k.frequency, 0) / MOCK_KEYWORDS.length,
-);
-const NEW_KEYWORDS_THIS_WEEK = 7;
-
 // ─── 페이지 컴포넌트 ──────────────────────────────────────────
 export default function KeywordsAnalysisPage() {
-  const [period, setPeriod] = useState<Period>('30d');
+  const [period, setPeriod] = useState<AnalyticsPeriod>('30d');
+  const [tagType, setTagType] = useState<KeywordTagType>('ALL');
 
-  const handleRefresh = () => {
-    toast.success('키워드 데이터를 새로고침했습니다.');
-  };
+  const { startDate, endDate } = periodToDateRange(period);
+  const query = useKeywordTop({ startDate, endDate, tagType, limit: 30 });
+
+  const data: KeywordTopResponse | undefined = query.data;
+  const rows = useMemo(() => (data ? adaptItems(data.items) : []), [data]);
+  const barData = useMemo(() => buildBarData(rows), [rows]);
+  const pieData = useMemo(() => buildPieData(rows), [rows]);
+  const trendData = useMemo(() => buildTrendData(rows), [rows]);
+  const top5Keywords = useMemo(() => rows.slice(0, 5).map((k) => k.keyword), [rows]);
 
   const handleExport = () => {
-    toast.success('키워드 분석 리포트를 다운로드합니다.');
+    toast.success('키워드 분석 리포트 다운로드는 백엔드 CSV 엔드포인트 준비 후 제공됩니다.');
   };
 
-  const periodLabel: Record<Period, string> = { '7d': '7일', '30d': '30일', '90d': '90일' };
+  const periodLabel: Record<AnalyticsPeriod, string> = { '7d': '7일', '30d': '30일', '90d': '90일' };
 
   return (
     <div>
@@ -135,8 +117,20 @@ export default function KeywordsAnalysisPage() {
         description="일기/프로필 키워드 트렌드 및 인기도 분석"
         actions={
           <div className="flex flex-wrap gap-2">
+            {/* 태그 타입 필터 */}
+            <select
+              value={tagType}
+              onChange={(e) => setTagType(e.target.value as KeywordTagType)}
+              className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              {TAG_TYPE_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {TAG_TYPE_LABELS[t] ?? t}
+                </option>
+              ))}
+            </select>
             {/* 기간 토글 */}
-            {(['7d', '30d', '90d'] as Period[]).map((p) => (
+            {(['7d', '30d', '90d'] as AnalyticsPeriod[]).map((p) => (
               <Button
                 key={p}
                 variant={period === p ? 'default' : 'outline'}
@@ -146,7 +140,7 @@ export default function KeywordsAnalysisPage() {
                 {periodLabel[p]}
               </Button>
             ))}
-            <Button variant="outline" size="sm" onClick={handleRefresh}>
+            <Button variant="outline" size="sm" onClick={() => query.refetch()}>
               <RefreshCw className="mr-1.5 h-4 w-4" />
               새로고침
             </Button>
@@ -158,231 +152,255 @@ export default function KeywordsAnalysisPage() {
         }
       />
 
-      {/* Mock 안내 배너 */}
-      <MockPageNotice description="GET /api/v2.2/admin/analytics/keywords 연결 예정" />
+      {/* degraded 배지 */}
+      {data?.meta?.degraded && (
+        <div className="mb-4">
+          <DegradedBadge degraded={data.meta.degraded} reason={data.meta.algorithm} />
+        </div>
+      )}
 
-      {/* KPI 카드 4개 */}
-      <div className="mb-6 grid gap-4 md:grid-cols-4">
-        <KpiCard
-          title="총 키워드 수"
-          value={TOTAL_KEYWORDS}
-          description={`${periodLabel[period]} 집계 기준`}
-          icon={Hash}
-          trend={{ value: 3, isPositive: true, label: '전주 대비' }}
+      {/* 로딩/에러 상태 */}
+      {query.isLoading && <AnalyticsLoading height={300} />}
+      {query.isError && (
+        <AnalyticsError
+          height={300}
+          message={(query.error as Error)?.message}
+          onRetry={() => query.refetch()}
         />
-        <KpiCard
-          title="Top 1 키워드"
-          value={TOP1_KEYWORD}
-          description={`빈도 ${MOCK_KEYWORDS[0].frequency.toLocaleString()}회`}
-          icon={TrendingUp}
-          trend={{ value: 12.3, isPositive: true, label: '전주 대비' }}
-          valueClassName="text-primary"
-        />
-        <KpiCard
-          title="평균 사용 빈도"
-          value={AVG_FREQUENCY}
-          description="키워드 1개당 평균 사용 횟수"
-          icon={Repeat}
-          trend={{ value: 5.8, isPositive: true, label: '전주 대비' }}
-        />
-        <KpiCard
-          title="신규 키워드(이번 주)"
-          value={NEW_KEYWORDS_THIS_WEEK}
-          description="처음 등장한 키워드"
-          icon={Sparkles}
-          trend={{ value: 2, isPositive: true, label: '전주 대비' }}
-          valueClassName="text-success"
-        />
-      </div>
+      )}
 
-      {/* 메인 차트: 키워드 빈도 BarChart Top 20 */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>키워드 빈도 Top 20 (가로 막대)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={520}>
-            <BarChart
-              data={BAR_DATA}
-              layout="vertical"
-              margin={{ top: 4, right: 24, left: 56, bottom: 4 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-              <XAxis
-                type="number"
-                stroke="#6b7280"
-                fontSize={12}
-                tickFormatter={(v: number) => v.toLocaleString()}
-              />
-              <YAxis
-                type="category"
-                dataKey="keyword"
-                stroke="#6b7280"
-                fontSize={12}
-                width={52}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                  color: 'hsl(var(--foreground))',
-                }}
-                formatter={(value: number) => [value.toLocaleString() + '회', '사용 빈도']}
-              />
-              <Bar dataKey="빈도" radius={[0, 4, 4, 0]}>
-                {BAR_DATA.map((_, index) => {
-                  // 순위에 따라 파란 계열 그라데이션 색상 적용
-                  const colors = [
-                    '#3b82f6', '#4589f7', '#5093f8', '#5a9df9', '#60a5fa',
-                    '#6aaefb', '#74b7fc', '#7ec0fd', '#88c9fe', '#93c5fd',
-                    '#9dcefe', '#a7d7ff', '#b1e0ff', '#bce9ff', '#bfdbfe',
-                    '#c9e4ff', '#d3edff', '#ddf6ff', '#dbeafe', '#e5f3ff',
-                  ];
-                  return <Cell key={index} fill={colors[index] ?? '#dbeafe'} />;
-                })}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* 보조 차트 2개 */}
-      <div className="mb-6 grid gap-6 md:grid-cols-2">
-        {/* 카테고리별 분포 PieChart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>카테고리별 키워드 분포</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={PIE_DATA}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  dataKey="value"
-                  label={({ name, percent }: { name: string; percent: number }) =>
-                    `${name} ${(percent * 100).toFixed(1)}%`
-                  }
-                  labelLine={false}
-                >
-                  {PIE_DATA.map((entry) => (
-                    <Cell
-                      key={entry.name}
-                      fill={CATEGORY_COLORS[entry.name] ?? '#93c5fd'}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                    color: 'hsl(var(--foreground))',
-                  }}
-                  formatter={(value: number) => [value.toLocaleString() + '회', '총 빈도']}
-                />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* 키워드 트렌드 LineChart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>키워드 트렌드 (최근 7일 Top 5)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <LineChart
-                data={MOCK_TREND_DATA}
-                margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
-                <YAxis
-                  stroke="#6b7280"
-                  fontSize={12}
-                  domain={['auto', 'auto']}
-                  tickFormatter={(v: number) => v.toLocaleString()}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                    color: 'hsl(var(--foreground))',
-                  }}
-                />
-                <Legend />
-                {TOP5_KEYWORDS.map((kw, i) => (
-                  <Line
-                    key={kw}
-                    type="monotone"
-                    dataKey={kw}
-                    stroke={TREND_LINE_COLORS[i]}
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4 }}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 키워드 상세 테이블 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>키워드 상세 (Top 30)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* 헤더 */}
-          <div className="mb-2 grid grid-cols-[40px_1fr_100px_100px_120px] gap-2 border-b border-border pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <span className="text-center">순위</span>
-            <span>키워드</span>
-            <span>카테고리</span>
-            <span className="text-right">사용 빈도</span>
-            <span className="text-right">전주 대비</span>
+      {data && (
+        <>
+          {/* KPI 카드 4개 */}
+          <div className="mb-6 grid gap-4 md:grid-cols-4">
+            <KpiCard
+              title="총 키워드 수"
+              value={rows.length}
+              description={`${periodLabel[period]} 집계 기준`}
+              icon={Hash}
+            />
+            <KpiCard
+              title="Top 1 키워드"
+              value={rows[0]?.keyword ?? '—'}
+              description={rows[0] ? `빈도 ${rows[0].frequency.toLocaleString()}회` : '데이터 없음'}
+              icon={TrendingUp}
+              valueClassName="text-primary"
+            />
+            <KpiCard
+              title="총 사용 횟수"
+              value={data.totalCount.toLocaleString()}
+              description="기간 내 전체 키워드 사용 합계"
+              icon={Repeat}
+            />
+            <KpiCard
+              title="평균 사용 빈도"
+              value={
+                rows.length
+                  ? Math.round(rows.reduce((s, k) => s + k.frequency, 0) / rows.length)
+                  : 0
+              }
+              description="키워드 1개당 평균 사용 횟수"
+              icon={Sparkles}
+              valueClassName="text-success"
+            />
           </div>
-          {/* 행 */}
-          <div className="divide-y divide-border">
-            {MOCK_KEYWORDS.map((item) => (
-              <div
-                key={item.rank}
-                className="grid grid-cols-[40px_1fr_100px_100px_120px] items-center gap-2 py-2.5 text-sm transition-colors hover:bg-muted/40"
-              >
-                <span className="text-center font-mono text-muted-foreground">{item.rank}</span>
-                <span className="font-medium text-foreground">{item.keyword}</span>
-                <span>
-                  <Badge
-                    variant="outline"
-                    style={{
-                      borderColor: CATEGORY_COLORS[item.category],
-                      color: CATEGORY_COLORS[item.category],
-                    }}
-                  >
-                    {item.category}
-                  </Badge>
-                </span>
-                <span className="text-right tabular-nums">{item.frequency.toLocaleString()}</span>
-                <span
-                  className={`text-right tabular-nums font-medium ${
-                    item.changeRate >= 0 ? 'text-success' : 'text-destructive'
-                  }`}
-                >
-                  {item.changeRate >= 0 ? '+' : ''}
-                  {item.changeRate.toFixed(1)}%
-                </span>
+
+          {rows.length === 0 ? (
+            <AnalyticsEmpty
+              height={300}
+              title="표시할 키워드가 없습니다"
+              description="기간 또는 태그 필터를 조정해 보세요."
+            />
+          ) : (
+            <>
+              {/* 메인 차트: 키워드 빈도 BarChart Top 20 */}
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle>키워드 빈도 Top 20 (가로 막대)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={520}>
+                    <BarChart
+                      data={barData}
+                      layout="vertical"
+                      margin={{ top: 4, right: 24, left: 56, bottom: 4 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                      <XAxis
+                        type="number"
+                        stroke="#6b7280"
+                        fontSize={12}
+                        tickFormatter={(v: number) => v.toLocaleString()}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="keyword"
+                        stroke="#6b7280"
+                        fontSize={12}
+                        width={52}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          color: 'hsl(var(--foreground))',
+                        }}
+                        formatter={(value: number) => [value.toLocaleString() + '회', '사용 빈도']}
+                      />
+                      <Bar dataKey="빈도" radius={[0, 4, 4, 0]}>
+                        {barData.map((_, index) => {
+                          const colors = [
+                            '#3b82f6', '#4589f7', '#5093f8', '#5a9df9', '#60a5fa',
+                            '#6aaefb', '#74b7fc', '#7ec0fd', '#88c9fe', '#93c5fd',
+                            '#9dcefe', '#a7d7ff', '#b1e0ff', '#bce9ff', '#bfdbfe',
+                            '#c9e4ff', '#d3edff', '#ddf6ff', '#dbeafe', '#e5f3ff',
+                          ];
+                          return <Cell key={index} fill={colors[index] ?? '#dbeafe'} />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* 보조 차트 2개 */}
+              <div className="mb-6 grid gap-6 md:grid-cols-2">
+                {/* 카테고리별 분포 PieChart */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>카테고리별 키워드 분포</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={100}
+                          dataKey="value"
+                          label={({ name, percent }: { name: string; percent: number }) =>
+                            `${name} ${(percent * 100).toFixed(1)}%`
+                          }
+                          labelLine={false}
+                        >
+                          {pieData.map((entry) => (
+                            <Cell
+                              key={entry.name}
+                              fill={TAG_TYPE_COLORS[entry.name] ?? '#93c5fd'}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--card))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'hsl(var(--foreground))',
+                          }}
+                          formatter={(value: number) => [value.toLocaleString() + '회', '총 빈도']}
+                        />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* 키워드 트렌드 LineChart (백엔드 시계열 미지원 — 현재 시점 단일 표시) */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>키워드 빈도 (Top 5 현재 시점)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <LineChart
+                        data={trendData}
+                        margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="date" stroke="#6b7280" fontSize={12} />
+                        <YAxis
+                          stroke="#6b7280"
+                          fontSize={12}
+                          domain={['auto', 'auto']}
+                          tickFormatter={(v: number) => v.toLocaleString()}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--card))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            color: 'hsl(var(--foreground))',
+                          }}
+                        />
+                        <Legend />
+                        {top5Keywords.map((kw, i) => (
+                          <Line
+                            key={kw}
+                            type="monotone"
+                            dataKey={kw}
+                            stroke={TREND_LINE_COLORS[i]}
+                            strokeWidth={2}
+                            dot={{ r: 4 }}
+                            activeDot={{ r: 6 }}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+
+              {/* 키워드 상세 테이블 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>키워드 상세 (Top {rows.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {/* 헤더 */}
+                  <div className="mb-2 grid grid-cols-[40px_1fr_120px_100px_100px] gap-2 border-b border-border pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <span className="text-center">순위</span>
+                    <span>키워드</span>
+                    <span>카테고리</span>
+                    <span className="text-right">사용 빈도</span>
+                    <span className="text-right">점유율</span>
+                  </div>
+                  {/* 행 */}
+                  <div className="divide-y divide-border">
+                    {rows.map((item) => (
+                      <div
+                        key={`${item.tagType}-${item.keyword}-${item.rank}`}
+                        className="grid grid-cols-[40px_1fr_120px_100px_100px] items-center gap-2 py-2.5 text-sm transition-colors hover:bg-muted/40"
+                      >
+                        <span className="text-center font-mono text-muted-foreground">{item.rank}</span>
+                        <span className="font-medium text-foreground">
+                          {item.masked ? '••• (k-anon)' : item.keyword}
+                        </span>
+                        <span>
+                          <Badge
+                            variant="outline"
+                            style={{
+                              borderColor: TAG_TYPE_COLORS[item.tagType] ?? '#93c5fd',
+                              color: TAG_TYPE_COLORS[item.tagType] ?? '#93c5fd',
+                            }}
+                          >
+                            {item.category}
+                          </Badge>
+                        </span>
+                        <span className="text-right tabular-nums">{item.frequency.toLocaleString()}</span>
+                        <span className="text-right tabular-nums font-medium text-muted-foreground">
+                          {(item.share * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }

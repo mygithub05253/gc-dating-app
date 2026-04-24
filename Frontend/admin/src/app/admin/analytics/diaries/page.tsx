@@ -4,7 +4,6 @@ import Link from 'next/link';
 import PageHeader from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import KpiCard from '@/components/common/KpiCard';
-import MockPageNotice from '@/components/common/MockPageNotice';
 import {
   BookOpen,
   Edit,
@@ -64,10 +63,6 @@ export default function DiariesAnalyticsPage() {
       <PageHeader
         title="일기 패턴 분석"
         description="일기 작성·품질·감정·주제·교환 패턴 종합 허브"
-      />
-
-      <MockPageNotice
-        description="일기 도메인 분석의 서브 페이지들로 이동해 세부 지표를 확인하세요"
       />
 
       {/* 개요 KPI 4개 */}
