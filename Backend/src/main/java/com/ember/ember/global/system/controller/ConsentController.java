@@ -1,5 +1,6 @@
 package com.ember.ember.global.system.controller;
 
+import com.ember.ember.consent.service.AiConsentService;
 import com.ember.ember.global.exception.BusinessException;
 import com.ember.ember.global.response.ApiResponse;
 import com.ember.ember.global.response.ErrorCode;
@@ -31,6 +32,7 @@ public class ConsentController {
 
     private final AiConsentLogRepository aiConsentLogRepository;
     private final UserRepository userRepository;
+    private final AiConsentService aiConsentService;
 
     /** 약관/AI 분석 동의 등록 */
     @PostMapping("/api/consent")
@@ -51,6 +53,9 @@ public class ConsentController {
                 .consentType(request.consentType())
                 .ipAddress(ipAddress)
                 .build());
+
+        // 동의 캐시 무효화
+        aiConsentService.invalidateConsent(userDetails.getUserId(), request.consentType());
 
         log.info("동의 등록: userId={}, type={}", userDetails.getUserId(), request.consentType());
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success());

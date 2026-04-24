@@ -10,6 +10,7 @@ import com.ember.ember.idealtype.domain.Keyword;
 import com.ember.ember.idealtype.domain.UserIdealKeyword;
 import com.ember.ember.idealtype.repository.KeywordRepository;
 import com.ember.ember.idealtype.repository.UserIdealKeywordRepository;
+import com.ember.ember.cache.service.CacheService;
 import com.ember.ember.user.domain.User;
 import com.ember.ember.user.domain.UserSetting;
 import com.ember.ember.user.dto.*;
@@ -37,6 +38,7 @@ public class MyPageService {
     private final ExchangeRoomRepository exchangeRoomRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final UserSettingRepository userSettingRepository;
+    private final CacheService cacheService;
 
     /** 이상형 키워드 조회 (마이페이지) */
     public IdealTypeDetailResponse getIdealType(Long userId) {
@@ -50,7 +52,6 @@ public class MyPageService {
                 ))
                 .toList();
 
-        // TODO: idealTypeUpdatedAt 필드 추가 후 30일 쿨다운 계산
         return new IdealTypeDetailResponse(items, 3, null);
     }
 
@@ -77,7 +78,10 @@ public class MyPageService {
                 .toList();
         userIdealKeywordRepository.saveAll(idealKeywords);
 
-        log.info("[이상형 수정] userId={}, keywords={}", userId, keywordIds);
+        // 매칭 추천 캐시 무효화 (명세서 §9.5: 이상형 수정 시 추천 목록 재생성)
+        cacheService.invalidate("MATCHING:RECO:" + userId);
+
+        log.info("[이상형 수정] userId={}, keywords={}, 매칭 캐시 무효화", userId, keywordIds);
 
         List<IdealTypeDetailResponse.KeywordItem> items = keywords.stream()
                 .map(k -> new IdealTypeDetailResponse.KeywordItem(k.getId(), k.getLabel(), "PERSONALITY"))
