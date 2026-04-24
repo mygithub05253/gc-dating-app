@@ -117,6 +117,7 @@ const navItems: NavItem[] = [
       { title: '세그먼트 분석', href: '/admin/analytics/segments' },
       { title: '연관규칙 (Apriori)', href: '/admin/analytics/associations' },
       { title: '사용자 여정', href: '/admin/analytics/journey' },
+      { title: 'AI 인사이트', href: '/admin/analytics/ai-insights' },
     ],
   },
   {
