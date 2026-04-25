@@ -2,91 +2,19 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import PageHeader from '@/components/layout/PageHeader';
 import SearchBar from '@/components/common/SearchBar';
 import DataTable, { type DataTableColumn } from '@/components/common/DataTable';
+import { AnalyticsLoading, AnalyticsError } from '@/components/common/AnalyticsStatus';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/utils/format';
-import { RefreshCw, Download, Eye, RotateCcw, Ban, Users, Shield, Clock } from 'lucide-react';
+import { RefreshCw, Download, Eye, RotateCcw, Ban, Shield, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// Mock 차단 이력 데이터
-const MOCK_BLOCK_HISTORY = [
-  {
-    id: 1,
-    blockerId: 123,
-    blockerNickname: '별빛소녀',
-    blockedId: 456,
-    blockedNickname: '달빛청년',
-    reason: 'HARASSMENT',
-    status: 'ACTIVE',
-    createdAt: '2024-03-23T10:00:00',
-    expiresAt: null,
-    adminAction: null,
-  },
-  {
-    id: 2,
-    blockerId: 789,
-    blockerNickname: '햇살가득',
-    blockedId: 101,
-    blockedNickname: '바람처럼',
-    reason: 'SPAM',
-    status: 'ACTIVE',
-    createdAt: '2024-03-22T15:30:00',
-    expiresAt: null,
-    adminAction: null,
-  },
-  {
-    id: 3,
-    blockerId: 202,
-    blockerNickname: '꽃구름',
-    blockedId: 303,
-    blockedNickname: '푸른바다',
-    reason: 'INAPPROPRIATE',
-    status: 'UNBLOCKED',
-    createdAt: '2024-03-20T09:00:00',
-    expiresAt: '2024-03-22T09:00:00',
-    adminAction: 'USER_UNBLOCKED',
-  },
-  {
-    id: 4,
-    blockerId: 404,
-    blockerNickname: '밤하늘별',
-    blockedId: 505,
-    blockedNickname: '달콤한하루',
-    reason: 'OFFENSIVE',
-    status: 'ACTIVE',
-    createdAt: '2024-03-21T14:00:00',
-    expiresAt: null,
-    adminAction: null,
-  },
-  {
-    id: 5,
-    blockerId: 606,
-    blockerNickname: '행복한날',
-    blockedId: 707,
-    blockedNickname: '자유로운영혼',
-    reason: 'OTHER',
-    status: 'ADMIN_CANCELLED',
-    createdAt: '2024-03-19T11:00:00',
-    expiresAt: null,
-    adminAction: 'CANCELLED_BY_ADMIN',
-  },
-  {
-    id: 6,
-    blockerId: 808,
-    blockerNickname: '봄날의꿈',
-    blockedId: 909,
-    blockedNickname: '여름밤',
-    reason: 'HARASSMENT',
-    status: 'ACTIVE',
-    createdAt: '2024-03-18T16:00:00',
-    expiresAt: null,
-    adminAction: null,
-  },
-];
+import { blocksApi } from '@/lib/api/blocks';
+import type { Block } from '@/types/report';
 
 const REASON_LABELS: Record<string, string> = {
   HARASSMENT: '괴롭힘',
@@ -119,8 +47,23 @@ const STATUS_COLORS: Record<string, string> = {
 export default function BlockHistoryPage() {
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [page, setPage] = useState(0);
+
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['blocks', { keyword, statusFilter, page }],
+    queryFn: () =>
+      blocksApi
+        .getList({
+          keyword: keyword || undefined,
+          status: statusFilter !== 'ALL' ? statusFilter : undefined,
+          page,
+          size: 20,
+        })
+        .then((res) => res.data.data),
+  });
 
   const handleRefresh = () => {
+    refetch();
     toast.success('차단 이력을 새로고침했습니다.');
   };
 
@@ -129,14 +72,12 @@ export default function BlockHistoryPage() {
   };
 
   const handleCancelBlock = (blockId: number) => {
-    void blockId; // Mock: 실제 API 연동 시 blockId 기반 취소 처리
+    void blockId; // 실제 API 연동 시 blockId 기반 취소 처리
     toast.success('차단을 취소했습니다.');
   };
 
-  type BlockRow = (typeof MOCK_BLOCK_HISTORY)[number];
-
-  // DataTable 컬럼 (handleCancelBlock 클로저 참조)
-  const columns: DataTableColumn<BlockRow>[] = useMemo(
+  // DataTable 컬럼
+  const columns: DataTableColumn<Block>[] = useMemo(
     () => [
       {
         key: 'blocker',
@@ -166,14 +107,18 @@ export default function BlockHistoryPage() {
         key: 'reason',
         header: '사유',
         cell: (b) => (
-          <Badge className={REASON_COLORS[b.reason]}>{REASON_LABELS[b.reason]}</Badge>
+          <Badge className={REASON_COLORS[b.reason] ?? 'bg-gray-100 text-gray-800'}>
+            {REASON_LABELS[b.reason] ?? b.reason}
+          </Badge>
         ),
       },
       {
         key: 'status',
         header: '상태',
         cell: (b) => (
-          <Badge className={STATUS_COLORS[b.status]}>{STATUS_LABELS[b.status]}</Badge>
+          <Badge className={STATUS_COLORS[b.status] ?? 'bg-gray-100 text-gray-800'}>
+            {STATUS_LABELS[b.status] ?? b.status}
+          </Badge>
         ),
       },
       {
@@ -206,17 +151,10 @@ export default function BlockHistoryPage() {
     [],
   );
 
-  // 키워드/상태 필터링
-  const filteredBlocks = MOCK_BLOCK_HISTORY.filter(block => {
-    const matchesKeyword = !keyword ||
-      block.blockerNickname.includes(keyword) ||
-      block.blockedNickname.includes(keyword);
-    const matchesStatus = statusFilter === 'ALL' || block.status === statusFilter;
-    return matchesKeyword && matchesStatus;
-  });
-
-  const activeCount = MOCK_BLOCK_HISTORY.filter(b => b.status === 'ACTIVE').length;
-  const totalCount = MOCK_BLOCK_HISTORY.length;
+  const blocks = data?.content ?? [];
+  const activeCount = blocks.filter((b: Block) => b.status === 'ACTIVE').length;
+  const unblockedCount = blocks.filter((b: Block) => b.status === 'UNBLOCKED').length;
+  const totalCount = data?.totalElements ?? blocks.length;
 
   return (
     <div>
@@ -263,18 +201,16 @@ export default function BlockHistoryPage() {
               <RotateCcw className="h-5 w-5 text-green-500" />
               <span className="text-sm text-muted-foreground">해제됨</span>
             </div>
-            <div className="mt-1 text-2xl font-bold text-green-600">
-              {MOCK_BLOCK_HISTORY.filter(b => b.status === 'UNBLOCKED').length}
-            </div>
+            <div className="mt-1 text-2xl font-bold text-green-600">{unblockedCount}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-orange-500" />
-              <span className="text-sm text-muted-foreground">오늘 발생</span>
+              <span className="text-sm text-muted-foreground">현재 페이지</span>
             </div>
-            <div className="mt-1 text-2xl font-bold">3</div>
+            <div className="mt-1 text-2xl font-bold">{blocks.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -300,13 +236,19 @@ export default function BlockHistoryPage() {
         </select>
       </div>
 
+      {/* Loading / Error */}
+      {isLoading && <AnalyticsLoading label="차단 이력을 불러오는 중입니다..." />}
+      {isError && <AnalyticsError message={error?.message || '차단 이력을 불러오지 못했습니다.'} />}
+
       {/* Block History List */}
-      <DataTable
-        columns={columns}
-        data={filteredBlocks}
-        rowKey={(b) => b.id}
-        emptyState="검색 결과가 없습니다."
-      />
+      {!isLoading && !isError && (
+        <DataTable
+          columns={columns}
+          data={blocks}
+          rowKey={(b) => b.id}
+          emptyState="검색 결과가 없습니다."
+        />
+      )}
     </div>
   );
 }

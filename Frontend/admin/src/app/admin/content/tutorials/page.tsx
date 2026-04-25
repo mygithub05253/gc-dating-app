@@ -2,13 +2,19 @@
 
 import { useState } from 'react';
 import PageHeader from '@/components/layout/PageHeader';
-import MockPageNotice from '@/components/common/MockPageNotice';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/utils/format';
+import {
+  useAdminTutorialsList,
+  useCreateAdminTutorial,
+  useUpdateAdminTutorial,
+  useDeleteAdminTutorial,
+} from '@/hooks/useAdminTutorials';
+import type { Tutorial, TutorialType } from '@/types/content';
 import {
   Plus,
   Edit,
@@ -17,24 +23,12 @@ import {
   BookOpen,
   Eye,
   EyeOff,
-  ChevronUp,
-  ChevronDown,
   GripVertical,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-type TutorialType = 'ONBOARDING' | 'EXCHANGE_DIARY' | 'MATCHING' | 'PROFILE';
-
-type MockTutorial = {
-  id: number;
-  type: TutorialType;
-  title: string;
-  description: string;
-  isActive: boolean;
-  stepsCount: number;
-  version: string;
-  updatedAt: string;
-};
+import { useQueryClient } from '@tanstack/react-query';
 
 const TUTORIAL_TYPE_LABELS: Record<TutorialType, string> = {
   ONBOARDING: '온보딩',
@@ -49,49 +43,6 @@ const TUTORIAL_TYPE_COLORS: Record<TutorialType, string> = {
   MATCHING: 'bg-purple-50 text-purple-700 border-purple-200',
   PROFILE: 'bg-green-50 text-green-700 border-green-200',
 };
-
-const MOCK_TUTORIALS: MockTutorial[] = [
-  {
-    id: 1,
-    type: 'ONBOARDING',
-    title: 'Ember 시작하기',
-    description: '처음 가입하는 사용자를 위한 튜토리얼입니다.',
-    isActive: true,
-    stepsCount: 5,
-    version: '1.0',
-    updatedAt: '2024-03-01T10:00:00',
-  },
-  {
-    id: 2,
-    type: 'EXCHANGE_DIARY',
-    title: '교환일기 가이드',
-    description: '교환일기 작성 방법과 턴 기반 시스템을 안내합니다.',
-    isActive: true,
-    stepsCount: 4,
-    version: '1.0',
-    updatedAt: '2024-03-05T14:00:00',
-  },
-  {
-    id: 3,
-    type: 'MATCHING',
-    title: '매칭 시스템 안내',
-    description: 'AI 매칭 알고리즘과 추천 방식을 설명합니다.',
-    isActive: true,
-    stepsCount: 3,
-    version: '1.1',
-    updatedAt: '2024-03-10T09:00:00',
-  },
-  {
-    id: 4,
-    type: 'PROFILE',
-    title: '프로필 설정 가이드',
-    description: '프로필을 매력적으로 설정하는 방법을 안내합니다.',
-    isActive: false,
-    stepsCount: 3,
-    version: '1.0',
-    updatedAt: '2024-02-20T11:00:00',
-  },
-];
 
 const TUTORIAL_TYPES: TutorialType[] = ['ONBOARDING', 'EXCHANGE_DIARY', 'MATCHING', 'PROFILE'];
 
@@ -113,15 +64,24 @@ const INITIAL_FORM: TutorialFormData = {
 
 export default function TutorialsPage() {
   const { hasPermission } = useAuthStore();
-  const [tutorials, setTutorials] = useState<MockTutorial[]>(MOCK_TUTORIALS);
+  const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<'ALL' | TutorialType>('ALL');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<TutorialFormData>(INITIAL_FORM);
 
-  const displayTutorials = tutorials.filter(
-    (t) => typeFilter === 'ALL' || t.type === typeFilter,
-  );
+  const { data: pageData, isLoading, isError } = useAdminTutorialsList({
+    type: typeFilter === 'ALL' ? undefined : typeFilter,
+  });
+  const createMutation = useCreateAdminTutorial();
+  const updateMutation = useUpdateAdminTutorial();
+  const deleteMutation = useDeleteAdminTutorial();
+
+  const tutorials: Tutorial[] = pageData?.content ?? [];
+
+  // For stats, load all tutorials
+  const { data: allPageData } = useAdminTutorialsList({});
+  const allTutorials: Tutorial[] = allPageData?.content ?? [];
 
   const openCreate = () => {
     setEditingId(null);
@@ -129,7 +89,7 @@ export default function TutorialsPage() {
     setShowForm(true);
   };
 
-  const openEdit = (tutorial: MockTutorial) => {
+  const openEdit = (tutorial: Tutorial) => {
     setEditingId(tutorial.id);
     setForm({
       type: tutorial.type,
@@ -146,24 +106,11 @@ export default function TutorialsPage() {
       toast.error('제목과 설명을 모두 입력해주세요.');
       return;
     }
-    const now = new Date().toISOString();
 
     if (editingId !== null) {
-      setTutorials((prev) =>
-        prev.map((t) =>
-          t.id === editingId ? { ...t, ...form, updatedAt: now } : t,
-        ),
-      );
-      toast.success('튜토리얼이 수정되었습니다.');
+      updateMutation.mutate({ id: editingId, body: { ...form, steps: [] } });
     } else {
-      const newTutorial: MockTutorial = {
-        id: Math.max(0, ...tutorials.map((t) => t.id)) + 1,
-        ...form,
-        stepsCount: 0,
-        updatedAt: now,
-      };
-      setTutorials((prev) => [...prev, newTutorial]);
-      toast.success('튜토리얼이 등록되었습니다.');
+      createMutation.mutate({ ...form, steps: [] });
     }
     setShowForm(false);
     setEditingId(null);
@@ -172,19 +119,43 @@ export default function TutorialsPage() {
 
   const handleDelete = (id: number) => {
     if (!confirm('이 튜토리얼을 삭제하시겠습니까?')) return;
-    setTutorials((prev) => prev.filter((t) => t.id !== id));
-    toast.success('튜토리얼이 삭제되었습니다.');
+    deleteMutation.mutate(id);
   };
 
-  const handleToggleActive = (id: number) => {
-    setTutorials((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, isActive: !t.isActive } : t)),
+  const handleToggleActive = (tutorial: Tutorial) => {
+    updateMutation.mutate({
+      id: tutorial.id,
+      body: { isActive: !tutorial.isActive },
+    });
+  };
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-tutorials-list'] });
+    toast.success('튜토리얼 목록을 새로고침했습니다.');
+  };
+
+  const activeCount = allTutorials.filter((t) => t.isActive).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">튜토리얼 목록을 불러오는 중...</span>
+      </div>
     );
-    const target = tutorials.find((t) => t.id === id);
-    toast.success(target?.isActive ? '튜토리얼이 비활성화되었습니다.' : '튜토리얼이 활성화되었습니다.');
-  };
+  }
 
-  const activeCount = tutorials.filter((t) => t.isActive).length;
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-red-400" />
+        <p className="mt-2">튜토리얼 목록을 불러오는데 실패했습니다.</p>
+        <Button variant="outline" className="mt-4" onClick={handleRefresh}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -194,7 +165,7 @@ export default function TutorialsPage() {
         actions={
           hasPermission('ADMIN') && (
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => toast.success('튜토리얼 목록을 새로고침했습니다.')}>
+              <Button variant="outline" onClick={handleRefresh}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 새로고침
               </Button>
@@ -207,8 +178,6 @@ export default function TutorialsPage() {
         }
       />
 
-      <MockPageNotice message="튜토리얼 도메인 백엔드 API 준비 중입니다. 현재는 Mock 데이터로 화면 흐름만 검증됩니다." />
-
       {/* 통계 */}
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         <Card>
@@ -217,7 +186,7 @@ export default function TutorialsPage() {
               <BookOpen className="h-5 w-5 text-blue-500" />
               <span className="text-sm text-muted-foreground">전체 튜토리얼</span>
             </div>
-            <div className="mt-2 text-2xl font-bold">{tutorials.length}</div>
+            <div className="mt-2 text-2xl font-bold">{allTutorials.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -312,7 +281,10 @@ export default function TutorialsPage() {
               >
                 취소
               </Button>
-              <Button onClick={handleSave}>
+              <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+                {(createMutation.isPending || updateMutation.isPending) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 {editingId !== null ? '수정 완료' : '등록'}
               </Button>
             </div>
@@ -336,7 +308,7 @@ export default function TutorialsPage() {
                   : 'bg-muted text-muted-foreground hover:bg-muted/70'
               }`}
             >
-              전체 ({tutorials.length})
+              전체 ({allTutorials.length})
             </button>
             {TUTORIAL_TYPES.map((t) => (
               <button
@@ -349,19 +321,19 @@ export default function TutorialsPage() {
                     : 'bg-muted text-muted-foreground hover:bg-muted/70'
                 }`}
               >
-                {TUTORIAL_TYPE_LABELS[t]} ({tutorials.filter((tu) => tu.type === t).length})
+                {TUTORIAL_TYPE_LABELS[t]} ({allTutorials.filter((tu) => tu.type === t).length})
               </button>
             ))}
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {displayTutorials.length === 0 ? (
+            {tutorials.length === 0 ? (
               <div className="py-16 text-center text-sm text-muted-foreground">
                 등록된 튜토리얼이 없습니다.
               </div>
             ) : (
-              displayTutorials.map((tutorial) => (
+              tutorials.map((tutorial) => (
                 <div
                   key={tutorial.id}
                   className={`rounded-lg border p-4 transition-colors ${
@@ -384,7 +356,7 @@ export default function TutorialsPage() {
                           {tutorial.isActive ? '활성' : '비활성'}
                         </Badge>
                         <Badge variant="outline">v{tutorial.version}</Badge>
-                        <Badge variant="outline">{tutorial.stepsCount}단계</Badge>
+                        <Badge variant="outline">{tutorial.steps.length}단계</Badge>
                       </div>
                       <h4 className="mt-2 font-medium">{tutorial.title}</h4>
                       <p className="mt-1 text-sm text-muted-foreground">
@@ -400,7 +372,7 @@ export default function TutorialsPage() {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => handleToggleActive(tutorial.id)}
+                          onClick={() => handleToggleActive(tutorial)}
                           className="rounded p-1.5 text-muted-foreground hover:bg-muted"
                           title={tutorial.isActive ? '비활성화' : '활성화'}
                         >

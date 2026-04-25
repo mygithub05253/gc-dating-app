@@ -1,14 +1,11 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
 import {
   Users,
   UserPlus,
   Heart,
-  Percent,
-  BookOpen,
-  MessageCircle,
-  AlertTriangle,
   TrendingDown,
   Hash,
   Brain,
@@ -20,10 +17,14 @@ import {
   Lightbulb,
   Clock,
   Route,
+  BookOpen,
+  MessageCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import PageHeader from '@/components/layout/PageHeader';
 import KpiCard from '@/components/common/KpiCard';
+import { AnalyticsLoading, AnalyticsError } from '@/components/common/AnalyticsStatus';
 import {
   AreaChart,
   Area,
@@ -36,25 +37,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-
-// ─────────────────────────── Mock 데이터 ────────────────────────────
-
-const signupData = [
-  { date: '4/18', users: 65 },
-  { date: '4/19', users: 78 },
-  { date: '4/20', users: 82 },
-  { date: '4/21', users: 70 },
-  { date: '4/22', users: 95 },
-  { date: '4/23', users: 89 },
-  { date: '4/24', users: 102 },
-];
-
-// Ember Signal 기반 차트 팔레트 — 하드코딩 색 금지
-const matchingData = [
-  { name: '성공', value: 156, token: 'hsl(var(--success))' },
-  { name: '진행중', value: 89, token: 'hsl(var(--primary))' },
-  { name: '만료', value: 34, token: 'hsl(var(--muted-foreground))' },
-];
+import { useDashboardKPI, useDailyStats, useMatchingStats } from '@/hooks/useDashboard';
 
 // Recharts Tooltip 브랜드 스타일 (다크모드 대응)
 const chartTooltipStyle: React.CSSProperties = {
@@ -65,67 +48,6 @@ const chartTooltipStyle: React.CSSProperties = {
   fontSize: '12px',
   fontFamily: 'Pretendard Variable, Pretendard, sans-serif',
 };
-
-// ─────────────────────────── 도메인 KPI 타입 ─────────────────────────
-
-interface MiniKpi {
-  label: string;
-  value: string;
-  highlight?: boolean; // primary 색상 강조 여부
-}
-
-interface DomainCard {
-  title: string;
-  kpis: MiniKpi[];
-}
-
-const domainCards: DomainCard[] = [
-  {
-    title: '사용자 도메인',
-    kpis: [
-      { label: 'MAU', value: '8,412', highlight: true },
-      { label: 'DAU', value: '1,203' },
-      { label: '가입→활성 전환율', value: '64.2%' },
-      { label: '평균 세션', value: '7.3분' },
-    ],
-  },
-  {
-    title: '매칭 도메인',
-    kpis: [
-      { label: '활성 매칭', value: '89', highlight: true },
-      { label: '성공률', value: '72.4%' },
-      { label: '평균 소요', value: '3.1일' },
-      { label: 'Champions 비율', value: '18.6%' },
-    ],
-  },
-  {
-    title: '일기 도메인',
-    kpis: [
-      { label: '일기 작성 수', value: '1,243', highlight: true },
-      { label: '100자 이상 비율', value: '81.7%' },
-      { label: '평균 품질 점수', value: '7.4 / 10' },
-      { label: '지배적 감정', value: '설렘 42%' },
-    ],
-  },
-  {
-    title: 'AI 도메인',
-    kpis: [
-      { label: '분석 정확도', value: '93.1%', highlight: true },
-      { label: '평균 매칭 점수', value: '0.78' },
-      { label: '평균 처리 시간', value: '1.2초' },
-      { label: '태그 추출률', value: '98.4%' },
-    ],
-  },
-  {
-    title: '교환 도메인',
-    kpis: [
-      { label: '교환일기 수', value: '432', highlight: true },
-      { label: '24h 응답률', value: '67.3%' },
-      { label: '7턴 완주율', value: '34.8%' },
-      { label: '만료율', value: '12.1%' },
-    ],
-  },
-];
 
 // ─────────────────────── 분석 허브 링크 타입 ─────────────────────────
 
@@ -223,14 +145,90 @@ const diaryAnalytics: AnalyticsLink[] = [
 // ─────────────────────────── 페이지 컴포넌트 ─────────────────────────
 
 export default function DashboardPage() {
-  const kpi = {
-    totalSignups: 15678,
-    newSignupsToday: 102,
-    matchingSuccessRate: 72.4,
-    churnRate7d: 8.3,
-  };
+  // 최근 7일 날짜 범위 계산
+  const dateRange = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 7);
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: end.toISOString().split('T')[0],
+    };
+  }, []);
 
-  const pendingReports = 12;
+  const { data: kpiData, isLoading: kpiLoading, isError: kpiError } = useDashboardKPI();
+  const { data: dailyStats } = useDailyStats(dateRange.startDate, dateRange.endDate);
+  const { data: matchingStats } = useMatchingStats();
+
+  // KPI 카드에서 값 추출
+  const findKpi = (key: string) => kpiData?.kpiCards?.find((k) => k.key === key);
+  const totalSignupsKpi = findKpi('totalSignups');
+  const newSignupsKpi = findKpi('newSignupsToday');
+  const matchingRateKpi = findKpi('matchingSuccessRate');
+  const churnRateKpi = findKpi('churnRate7d');
+
+  // 일별 통계 → 차트 데이터
+  const signupChartData = (dailyStats ?? []).map((d) => ({
+    date: d.date.substring(5), // MM-DD → M/DD
+    users: d.newUsers,
+  }));
+
+  // 매칭 현황 차트 데이터
+  const matchingChartData = matchingStats
+    ? [
+        { name: '성공', value: Math.round((matchingStats.totalMatches * matchingStats.successRate) / 100), token: 'hsl(var(--success))' },
+        { name: '진행중', value: matchingStats.totalMatches - Math.round((matchingStats.totalMatches * matchingStats.successRate) / 100), token: 'hsl(var(--primary))' },
+      ]
+    : [
+        { name: '성공', value: 0, token: 'hsl(var(--success))' },
+        { name: '진행중', value: 0, token: 'hsl(var(--primary))' },
+      ];
+
+  // 도메인 요약 카드 (API에서 오면 동적, 없으면 KPI로 구성)
+  const domainCards = useMemo(
+    () => [
+      {
+        title: '사용자 도메인',
+        kpis: [
+          { label: '총 가입자', value: totalSignupsKpi ? totalSignupsKpi.currentValue.toLocaleString() : '-', highlight: true },
+          { label: '오늘 가입', value: newSignupsKpi ? newSignupsKpi.currentValue.toLocaleString() : '-' },
+          { label: '매칭 성공률', value: matchingRateKpi ? `${matchingRateKpi.currentValue}%` : '-' },
+          { label: '7일 이탈률', value: churnRateKpi ? `${churnRateKpi.currentValue}%` : '-' },
+        ],
+      },
+      {
+        title: '매칭 도메인',
+        kpis: [
+          { label: '총 매칭 수', value: matchingStats?.totalMatches?.toLocaleString() ?? '-', highlight: true },
+          { label: '성공률', value: matchingStats ? `${matchingStats.successRate}%` : '-' },
+          { label: '평균 소요', value: matchingStats ? `${matchingStats.averageMatchTime}일` : '-' },
+        ],
+      },
+    ],
+    [totalSignupsKpi, newSignupsKpi, matchingRateKpi, churnRateKpi, matchingStats],
+  );
+
+  // 이상 징후 알림
+  const anomalyAlerts = kpiData?.anomalyAlerts ?? [];
+  const pendingReports = anomalyAlerts.length;
+
+  if (kpiLoading) {
+    return (
+      <div>
+        <PageHeader title="대시보드" description="Ember 서비스 현황 종합" />
+        <AnalyticsLoading label="대시보드 데이터를 불러오는 중입니다..." />
+      </div>
+    );
+  }
+
+  if (kpiError) {
+    return (
+      <div>
+        <PageHeader title="대시보드" description="Ember 서비스 현황 종합" />
+        <AnalyticsError message="대시보드 데이터를 불러오지 못했습니다." />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -243,32 +241,44 @@ export default function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="누적 가입자"
-          value={kpi.totalSignups}
+          value={totalSignupsKpi?.currentValue ?? 0}
           icon={Users}
-          trend={{ value: 3.2, isPositive: true }}
+          trend={totalSignupsKpi ? {
+            value: Math.abs(totalSignupsKpi.changeRate),
+            isPositive: totalSignupsKpi.changeDirection === 'UP',
+          } : undefined}
         />
         <KpiCard
           title="신규 가입자"
-          value={kpi.newSignupsToday}
+          value={newSignupsKpi?.currentValue ?? 0}
           icon={UserPlus}
-          trend={{ value: 14.6, isPositive: true }}
+          trend={newSignupsKpi ? {
+            value: Math.abs(newSignupsKpi.changeRate),
+            isPositive: newSignupsKpi.changeDirection === 'UP',
+          } : undefined}
           description="오늘"
         />
         <KpiCard
           title="매칭 성공률"
-          value={`${kpi.matchingSuccessRate}%`}
+          value={matchingRateKpi ? `${matchingRateKpi.currentValue}%` : '-'}
           icon={Heart}
-          trend={{ value: 2.8, isPositive: true }}
+          trend={matchingRateKpi ? {
+            value: Math.abs(matchingRateKpi.changeRate),
+            isPositive: matchingRateKpi.changeDirection === 'UP',
+          } : undefined}
         />
         <KpiCard
           title="7일 이탈률"
-          value={`${kpi.churnRate7d}%`}
+          value={churnRateKpi ? `${churnRateKpi.currentValue}%` : '-'}
           icon={TrendingDown}
-          trend={{ value: 1.5, isPositive: false }}
+          trend={churnRateKpi ? {
+            value: Math.abs(churnRateKpi.changeRate),
+            isPositive: churnRateKpi.changeDirection === 'DOWN',
+          } : undefined}
         />
       </div>
 
-      {/* ── 도메인 요약 5개 ── */}
+      {/* ── 도메인 요약 ── */}
       <div className="mt-8">
         <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-muted-foreground">
           도메인 요약
@@ -315,43 +325,47 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={signupData}>
-                <defs>
-                  <linearGradient id="emberFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(var(--border))"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="date"
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip contentStyle={chartTooltipStyle} />
-                <Area
-                  type="monotone"
-                  dataKey="users"
-                  stroke="hsl(var(--primary))"
-                  fill="url(#emberFill)"
-                  strokeWidth={2}
-                  name="신규 가입자"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {signupChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={signupChartData}>
+                  <defs>
+                    <linearGradient id="emberFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="hsl(var(--border))"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="date"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip contentStyle={chartTooltipStyle} />
+                  <Area
+                    type="monotone"
+                    dataKey="users"
+                    stroke="hsl(var(--primary))"
+                    fill="url(#emberFill)"
+                    strokeWidth={2}
+                    name="신규 가입자"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-8">데이터가 없습니다.</p>
+            )}
           </CardContent>
         </Card>
 
@@ -364,7 +378,7 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie
-                    data={matchingData}
+                    data={matchingChartData}
                     cx="50%"
                     cy="50%"
                     innerRadius={55}
@@ -374,7 +388,7 @@ export default function DashboardPage() {
                     stroke="hsl(var(--card))"
                     strokeWidth={2}
                   >
-                    {matchingData.map((entry, index) => (
+                    {matchingChartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.token} />
                     ))}
                   </Pie>
@@ -383,7 +397,7 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </div>
             <div className="mt-2 flex justify-center gap-6">
-              {matchingData.map((item) => (
+              {matchingChartData.map((item) => (
                 <div key={item.name} className="flex items-center gap-2">
                   <div
                     className="h-2.5 w-2.5 rounded-full"
@@ -401,6 +415,30 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── 이상 징후 알림 ── */}
+      {anomalyAlerts.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            이상 징후 알림
+          </h2>
+          <div className="space-y-2">
+            {anomalyAlerts.map((alert, idx) => (
+              <Card key={idx} className={alert.severity === 'CRITICAL' ? 'border-red-300' : 'border-yellow-300'}>
+                <CardContent className="flex items-center gap-3 p-4">
+                  <AlertTriangle className={`h-5 w-5 ${alert.severity === 'CRITICAL' ? 'text-red-500' : 'text-yellow-500'}`} />
+                  <span className="text-sm">{alert.message}</span>
+                  {alert.link && (
+                    <Link href={alert.link} className="ml-auto text-sm text-primary hover:underline">
+                      상세보기
+                    </Link>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── 분석 허브 ── */}
       <div className="mt-8">
@@ -477,7 +515,7 @@ export default function DashboardPage() {
                     <span className="font-mono-data tabular-nums text-foreground">
                       {pendingReports}
                     </span>
-                    건 대기
+                    건 알림
                   </p>
                 </div>
               </CardContent>
@@ -494,7 +532,7 @@ export default function DashboardPage() {
                   <p className="text-sm text-muted-foreground">
                     신규 가입{' '}
                     <span className="font-mono-data tabular-nums text-foreground">
-                      {kpi.newSignupsToday}
+                      {newSignupsKpi?.currentValue ?? 0}
                     </span>
                     명
                   </p>

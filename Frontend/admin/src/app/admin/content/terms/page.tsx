@@ -7,72 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/utils/format';
 import { TERMS_TYPE_LABELS, TERMS_STATUS_LABELS } from '@/lib/constants';
-import { RefreshCw, Plus, Edit, Eye, History, FileText, Shield, Users } from 'lucide-react';
+import { RefreshCw, Plus, Edit, Eye, History, FileText, Shield, Users, Loader2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// Mock 약관 데이터 (ERD v2.0: USER_TERMS / AI_TERMS 2종 통합)
-const MOCK_TERMS = [
-  {
-    id: 1,
-    type: 'USER_TERMS',
-    title: '서비스 이용 약관 (서비스/개인정보/위치/마케팅 통합)',
-    version: '2.1',
-    status: 'ACTIVE',
-    content: '제1조 (목적)\n본 약관은 Ember 교환일기 서비스의 이용에 관한 사항을 규정한다...',
-    effectiveDate: '2024-03-01T00:00:00',
-    createdAt: '2024-02-25T10:00:00',
-    updatedAt: '2024-02-28T15:30:00',
-    updatedBy: '김관리',
-    acceptCount: 45678,
-  },
-  {
-    id: 2,
-    type: 'AI_TERMS',
-    title: 'AI 분석 동의',
-    version: '1.1',
-    status: 'ACTIVE',
-    content: '1. AI 분석 항목\n일기 내용의 감정 분석, 키워드 추출, 매칭 추천을 위해 KcELECTRA / KoSimCSE 모델을 사용합니다...',
-    effectiveDate: '2024-02-01T00:00:00',
-    createdAt: '2024-01-28T10:00:00',
-    updatedAt: '2024-01-30T11:00:00',
-    updatedBy: '이운영',
-    acceptCount: 41234,
-  },
-  {
-    id: 3,
-    type: 'USER_TERMS',
-    title: '서비스 이용 약관 (구버전)',
-    version: '2.0',
-    status: 'ARCHIVED',
-    content: '제1조 (목적)\n본 약관은 v2.1로 대체되었습니다.',
-    effectiveDate: '2024-01-01T00:00:00',
-    createdAt: '2023-12-20T10:00:00',
-    updatedAt: '2024-02-28T15:30:00',
-    updatedBy: '김관리',
-    acceptCount: 12345,
-  },
-  {
-    id: 4,
-    type: 'AI_TERMS',
-    title: 'AI 분석 동의 (구버전)',
-    version: '1.0',
-    status: 'ARCHIVED',
-    content: '제1조: v1.1로 대체되었습니다.',
-    effectiveDate: '2024-01-01T00:00:00',
-    createdAt: '2023-12-20T10:00:00',
-    updatedAt: '2024-01-30T10:00:00',
-    updatedBy: '이운영',
-    acceptCount: 8765,
-  },
-];
-
-// Mock 약관 버전 이력
-const MOCK_TERM_HISTORY = [
-  { version: '2.1', date: '2024-03-01', change: '교환일기 관련 조항 추가' },
-  { version: '2.0', date: '2024-01-01', change: '5종(서비스/개인정보/위치/마케팅/AI)을 2종(USER_TERMS/AI_TERMS)으로 통합' },
-  { version: '1.5', date: '2023-10-01', change: '개인정보 처리 관련 조항 수정' },
-  { version: '1.0', date: '2023-07-01', change: '최초 등록' },
-];
+import { useAdminTermsList, useAdminTermsHistory } from '@/hooks/useAdminTerms';
+import type { Terms, TermsVersionHistory } from '@/types/content';
+import { useQueryClient } from '@tanstack/react-query';
 
 const TYPE_COLORS: Record<string, string> = {
   USER_TERMS: 'bg-blue-100 text-blue-800',
@@ -86,9 +25,18 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function TermsManagementPage() {
+  const queryClient = useQueryClient();
   const [selectedTerm, setSelectedTerm] = useState<number | null>(null);
 
+  const { data: pageData, isLoading, isError } = useAdminTermsList({});
+  const { data: historyData } = useAdminTermsHistory();
+
+  const terms: Terms[] = pageData?.content ?? [];
+  const termHistory: TermsVersionHistory[] = historyData ?? [];
+
   const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-terms-list'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-terms-history'] });
     toast.success('약관 목록을 새로고침했습니다.');
   };
 
@@ -105,7 +53,28 @@ export default function TermsManagementPage() {
     toast.success('버전 이력을 조회합니다.');
   };
 
-  const activeTerms = MOCK_TERMS.filter(t => t.status === 'ACTIVE');
+  const activeTerms = terms.filter(t => t.status === 'ACTIVE');
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">약관 목록을 불러오는 중...</span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-red-400" />
+        <p className="mt-2">약관 목록을 불러오는데 실패했습니다.</p>
+        <Button variant="outline" className="mt-4" onClick={handleRefresh}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -134,7 +103,7 @@ export default function TermsManagementPage() {
               <FileText className="h-5 w-5 text-blue-500" />
               <span className="text-sm text-muted-foreground">전체 약관</span>
             </div>
-            <div className="mt-1 text-2xl font-bold">{MOCK_TERMS.length}</div>
+            <div className="mt-1 text-2xl font-bold">{terms.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -153,7 +122,7 @@ export default function TermsManagementPage() {
               <span className="text-sm text-muted-foreground">총 동의 수</span>
             </div>
             <div className="mt-1 text-2xl font-bold">
-              {MOCK_TERMS.reduce((sum, t) => sum + t.acceptCount, 0).toLocaleString()}
+              {terms.reduce((sum, t) => sum + t.acceptCount, 0).toLocaleString()}
             </div>
           </CardContent>
         </Card>
@@ -164,7 +133,7 @@ export default function TermsManagementPage() {
               <span className="text-sm text-muted-foreground">보관된 버전</span>
             </div>
             <div className="mt-1 text-2xl font-bold">
-              {MOCK_TERMS.filter(t => t.status === 'ARCHIVED').length}
+              {terms.filter(t => t.status === 'ARCHIVED').length}
             </div>
           </CardContent>
         </Card>
@@ -172,7 +141,7 @@ export default function TermsManagementPage() {
 
       {/* Terms List */}
       <div className="grid gap-4">
-        {MOCK_TERMS.map(term => (
+        {terms.map(term => (
           <Card key={term.id} className={term.status === 'ARCHIVED' ? 'opacity-60' : ''}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
@@ -235,16 +204,22 @@ export default function TermsManagementPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {MOCK_TERM_HISTORY.map((history, index) => (
-                <div key={index} className="flex items-center gap-4 pb-3 border-b last:border-0">
-                  <Badge variant="outline">v{history.version}</Badge>
-                  <span className="text-sm text-muted-foreground">{history.date}</span>
-                  <span className="text-sm flex-1">{history.change}</span>
-                  <Button variant="ghost" size="sm">
-                    <Eye className="h-4 w-4" />
-                  </Button>
+              {termHistory.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  버전 이력이 없습니다.
                 </div>
-              ))}
+              ) : (
+                termHistory.map((history, index) => (
+                  <div key={index} className="flex items-center gap-4 pb-3 border-b last:border-0">
+                    <Badge variant="outline">v{history.version}</Badge>
+                    <span className="text-sm text-muted-foreground">{history.date}</span>
+                    <span className="text-sm flex-1">{history.change}</span>
+                    <Button variant="ghost" size="sm">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>

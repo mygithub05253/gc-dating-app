@@ -2,13 +2,20 @@
 
 import { useState } from 'react';
 import PageHeader from '@/components/layout/PageHeader';
-import MockPageNotice from '@/components/common/MockPageNotice';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/utils/format';
+import {
+  useAdminBannersList,
+  useCreateAdminBanner,
+  useUpdateAdminBanner,
+  useDeleteAdminBanner,
+} from '@/hooks/useAdminBanners';
+import type { BannerCreateRequest } from '@/lib/api/banners';
+import type { Banner } from '@/types/content';
 import {
   Plus,
   Edit,
@@ -18,68 +25,11 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// Mock 배너 데이터
-type MockBanner = {
-  id: number;
-  title: string;
-  imageUrl: string;
-  linkUrl: string;
-  isActive: boolean;
-  displayOrder: number;
-  startDate: string;
-  endDate: string;
-  createdAt: string;
-};
-
-const MOCK_BANNERS: MockBanner[] = [
-  {
-    id: 1,
-    title: '봄맞이 교환일기 이벤트',
-    imageUrl: 'https://example.com/banner1.jpg',
-    linkUrl: '/events/spring-2024',
-    isActive: true,
-    displayOrder: 1,
-    startDate: '2024-03-01T00:00:00',
-    endDate: '2024-03-31T23:59:59',
-    createdAt: '2024-02-28T10:00:00',
-  },
-  {
-    id: 2,
-    title: '신규 회원 환영 배너',
-    imageUrl: 'https://example.com/banner2.jpg',
-    linkUrl: '/welcome',
-    isActive: true,
-    displayOrder: 2,
-    startDate: '2024-01-01T00:00:00',
-    endDate: '2024-12-31T23:59:59',
-    createdAt: '2024-01-01T10:00:00',
-  },
-  {
-    id: 3,
-    title: '시스템 점검 안내',
-    imageUrl: 'https://example.com/banner3.jpg',
-    linkUrl: '/notices/3',
-    isActive: false,
-    displayOrder: 3,
-    startDate: '2024-03-25T00:00:00',
-    endDate: '2024-03-25T06:00:00',
-    createdAt: '2024-03-22T15:00:00',
-  },
-  {
-    id: 4,
-    title: 'AI 매칭 업데이트 알림',
-    imageUrl: 'https://example.com/banner4.jpg',
-    linkUrl: '/notices/5',
-    isActive: true,
-    displayOrder: 4,
-    startDate: '2024-03-15T00:00:00',
-    endDate: '2024-04-15T23:59:59',
-    createdAt: '2024-03-14T09:00:00',
-  },
-];
+import { useQueryClient } from '@tanstack/react-query';
 
 interface BannerFormData {
   title: string;
@@ -103,10 +53,17 @@ const INITIAL_FORM: BannerFormData = {
 
 export default function BannersPage() {
   const { hasPermission } = useAuthStore();
-  const [banners, setBanners] = useState<MockBanner[]>(MOCK_BANNERS);
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<BannerFormData>(INITIAL_FORM);
+
+  const { data: pageData, isLoading, isError } = useAdminBannersList({});
+  const createMutation = useCreateAdminBanner();
+  const updateMutation = useUpdateAdminBanner();
+  const deleteMutation = useDeleteAdminBanner();
+
+  const banners: Banner[] = pageData?.content ?? [];
 
   const openCreate = () => {
     setEditingId(null);
@@ -114,7 +71,7 @@ export default function BannersPage() {
     setShowForm(true);
   };
 
-  const openEdit = (banner: MockBanner) => {
+  const openEdit = (banner: Banner) => {
     setEditingId(banner.id);
     setForm({
       title: banner.title,
@@ -133,25 +90,16 @@ export default function BannersPage() {
       toast.error('제목과 이미지 URL을 입력해주세요.');
       return;
     }
-    const now = new Date().toISOString();
 
     if (editingId !== null) {
-      setBanners((prev) =>
-        prev.map((b) =>
-          b.id === editingId ? { ...b, ...form, startDate: form.startDate || b.startDate, endDate: form.endDate || b.endDate } : b,
-        ),
-      );
-      toast.success('배너가 수정되었습니다.');
+      updateMutation.mutate({ id: editingId, body: form });
     } else {
-      const newBanner: MockBanner = {
-        id: Math.max(0, ...banners.map((b) => b.id)) + 1,
+      const body: BannerCreateRequest = {
         ...form,
-        startDate: form.startDate || now,
-        endDate: form.endDate || now,
-        createdAt: now,
+        startDate: form.startDate || new Date().toISOString(),
+        endDate: form.endDate || new Date().toISOString(),
       };
-      setBanners((prev) => [...prev, newBanner]);
-      toast.success('배너가 등록되었습니다.');
+      createMutation.mutate(body);
     }
     setShowForm(false);
     setEditingId(null);
@@ -160,19 +108,43 @@ export default function BannersPage() {
 
   const handleDelete = (id: number) => {
     if (!confirm('이 배너를 삭제하시겠습니까?')) return;
-    setBanners((prev) => prev.filter((b) => b.id !== id));
-    toast.success('배너가 삭제되었습니다.');
+    deleteMutation.mutate(id);
   };
 
-  const handleToggleActive = (id: number) => {
-    setBanners((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, isActive: !b.isActive } : b)),
-    );
-    const target = banners.find((b) => b.id === id);
-    toast.success(target?.isActive ? '배너가 비활성화되었습니다.' : '배너가 활성화되었습니다.');
+  const handleToggleActive = (banner: Banner) => {
+    updateMutation.mutate({
+      id: banner.id,
+      body: { isActive: !banner.isActive },
+    });
+  };
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-banners-list'] });
+    toast.success('배너 목록을 새로고침했습니다.');
   };
 
   const activeCount = banners.filter((b) => b.isActive).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">배너 목록을 불러오는 중...</span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-red-400" />
+        <p className="mt-2">배너 목록을 불러오는데 실패했습니다.</p>
+        <Button variant="outline" className="mt-4" onClick={handleRefresh}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -182,7 +154,7 @@ export default function BannersPage() {
         actions={
           hasPermission('ADMIN') && (
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => toast.success('배너 목록을 새로고침했습니다.')}>
+              <Button variant="outline" onClick={handleRefresh}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 새로고침
               </Button>
@@ -194,8 +166,6 @@ export default function BannersPage() {
           )
         }
       />
-
-      <MockPageNotice message="배너 도메인 백엔드 API 준비 중입니다. 현재는 Mock 데이터로 화면 흐름만 검증됩니다." />
 
       {/* 통계 */}
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -311,7 +281,10 @@ export default function BannersPage() {
               >
                 취소
               </Button>
-              <Button onClick={handleSave}>
+              <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+                {(createMutation.isPending || updateMutation.isPending) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 {editingId !== null ? '수정 완료' : '등록'}
               </Button>
             </div>
@@ -331,7 +304,7 @@ export default function BannersPage() {
                 등록된 배너가 없습니다.
               </div>
             ) : (
-              banners
+              [...banners]
                 .sort((a, b) => a.displayOrder - b.displayOrder)
                 .map((banner) => (
                   <div
@@ -374,7 +347,7 @@ export default function BannersPage() {
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => handleToggleActive(banner.id)}
+                            onClick={() => handleToggleActive(banner)}
                             className="rounded p-1.5 text-muted-foreground hover:bg-muted"
                             title={banner.isActive ? '비활성화' : '활성화'}
                           >

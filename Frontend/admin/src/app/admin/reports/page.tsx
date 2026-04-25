@@ -2,28 +2,22 @@
 
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import PageHeader from '@/components/layout/PageHeader';
 import SearchBar from '@/components/common/SearchBar';
 import DataTable, { type DataTableColumn } from '@/components/common/DataTable';
+import { AnalyticsLoading, AnalyticsError } from '@/components/common/AnalyticsStatus';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/utils/format';
 import { REPORT_REASON_LABELS, REPORT_STATUS_LABELS, REPORT_STATUS_COLORS } from '@/lib/constants';
-import type { ReportReason, ReportStatus, SlaStatus } from '@/types/report';
+import type { Report, ReportReason, ReportStatus, SlaStatus } from '@/types/report';
 import { RefreshCw, Download, Eye, AlertTriangle, Clock, ShieldAlert, Timer, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// 기능명세서 9.1 심각도 가중치 (ERD v2.0 ReportReason 기준)
-const SEVERITY_WEIGHTS: Record<ReportReason, number> = {
-  SEXUAL: 5,
-  PERSONAL_INFO: 4,
-  HARASSMENT: 3,
-  PROFANITY: 2,
-  IMPERSONATION: 2,
-  SPAM: 2,
-  OTHER: 1,
-};
+import { useReportList } from '@/hooks/useReports';
+import { reportsApi } from '@/lib/api/reports';
+import type { ReportSummary } from '@/types/report';
 
 // SLA 상태 라벨 (API v2.1 신규)
 const SLA_STATUS_LABELS: Record<SlaStatus, string> = {
@@ -37,118 +31,6 @@ const SLA_STATUS_COLORS: Record<SlaStatus, string> = {
   WARNING: 'bg-yellow-100 text-yellow-800',
   OVERDUE: 'bg-red-100 text-red-800',
 };
-
-// 서버 계산 라벨 매핑 로직 (API v2.1: 서버에서 내려주는 값, FE는 시각화만)
-function resolveSlaStatus(progress: number): SlaStatus {
-  if (progress >= 1.0) return 'OVERDUE';
-  if (progress >= 0.8) return 'WARNING';
-  return 'ON_TRACK';
-}
-
-// Mock 신고 데이터 (기능명세서 9.1 + ERD v2.1 정합)
-type MockReport = {
-  id: number;
-  reporterNickname: string;
-  targetNickname: string;
-  reason: ReportReason;
-  status: ReportStatus;
-  accumulatedReportCount: number;
-  slaDeadline: string;
-  slaProgress: number;
-  slaStatus: SlaStatus;
-  priorityScore: number;
-  assignedTo: number | null; // ERD v2.1: admin_accounts.id
-  assignedAdminName: string | null; // API v2.1: 표시명
-  createdAt: string;
-};
-
-const RAW_MOCK_REPORTS: Array<Omit<MockReport, 'priorityScore' | 'slaStatus'>> = [
-  {
-    id: 1,
-    reporterNickname: '별빛소녀',
-    targetNickname: '달빛청년',
-    reason: 'PROFANITY',
-    status: 'PENDING',
-    accumulatedReportCount: 3,
-    slaDeadline: '2024-03-26T10:00:00',
-    slaProgress: 0.45,
-    assignedTo: null,
-    assignedAdminName: null,
-    createdAt: '2024-03-23T10:00:00',
-  },
-  {
-    id: 2,
-    reporterNickname: '햇살가득',
-    targetNickname: '바람처럼',
-    reason: 'SEXUAL',
-    status: 'IN_REVIEW',
-    accumulatedReportCount: 2,
-    slaDeadline: '2024-03-24T15:00:00',
-    slaProgress: 0.88,
-    assignedTo: 1001,
-    assignedAdminName: '김관리',
-    createdAt: '2024-03-23T15:00:00',
-  },
-  {
-    id: 3,
-    reporterNickname: '꽃구름',
-    targetNickname: '푸른바다',
-    reason: 'SPAM',
-    status: 'RESOLVED',
-    accumulatedReportCount: 1,
-    slaDeadline: '2024-03-25T09:00:00',
-    slaProgress: 0.3,
-    assignedTo: 1001,
-    assignedAdminName: '김관리',
-    createdAt: '2024-03-22T09:00:00',
-  },
-  {
-    id: 4,
-    reporterNickname: '밤하늘별',
-    targetNickname: '달콤한하루',
-    reason: 'HARASSMENT',
-    status: 'PENDING',
-    accumulatedReportCount: 5,
-    slaDeadline: '2024-03-25T14:00:00',
-    slaProgress: 0.72,
-    assignedTo: null,
-    assignedAdminName: null,
-    createdAt: '2024-03-22T14:00:00',
-  },
-  {
-    id: 5,
-    reporterNickname: '행복한날',
-    targetNickname: '자유로운영혼',
-    reason: 'PERSONAL_INFO',
-    status: 'IN_REVIEW',
-    accumulatedReportCount: 1,
-    slaDeadline: '2024-03-24T10:00:00',
-    slaProgress: 1.15,
-    assignedTo: 1002,
-    assignedAdminName: '박슈퍼',
-    createdAt: '2024-03-23T10:00:00',
-  },
-  {
-    id: 6,
-    reporterNickname: '봄날의꿈',
-    targetNickname: '여름밤',
-    reason: 'OTHER',
-    status: 'DISMISSED',
-    accumulatedReportCount: 1,
-    slaDeadline: '2024-03-26T09:00:00',
-    slaProgress: 0.2,
-    assignedTo: 1001,
-    assignedAdminName: '김관리',
-    createdAt: '2024-03-23T09:00:00',
-  },
-];
-
-const MOCK_REPORTS: MockReport[] = RAW_MOCK_REPORTS.map((r) => ({
-  ...r,
-  // 기능명세서 9.1: priorityScore = 심각도 × 누적신고수 × (1 + SLA진행률)
-  priorityScore: SEVERITY_WEIGHTS[r.reason] * r.accumulatedReportCount * (1 + r.slaProgress),
-  slaStatus: resolveSlaStatus(r.slaProgress),
-}));
 
 function getSlaBarColor(status: SlaStatus) {
   if (status === 'OVERDUE') return 'bg-red-500';
@@ -165,39 +47,43 @@ export default function ReportsPage() {
   const [slaOverdueOnly, setSlaOverdueOnly] = useState<boolean>(false);
   const [minPriority, setMinPriority] = useState<number>(0);
 
-  // 현재 로그인 관리자 Mock (실제 환경에서는 session에서 조회)
-  const currentAdminId = 1001;
+  // 서버 필터 파라미터 구성
+  const searchParams = useMemo(() => ({
+    status: statusFilter !== 'ALL' ? (statusFilter as ReportStatus) : undefined,
+    reason: reasonFilter !== 'ALL' ? (reasonFilter as ReportReason) : undefined,
+    assignedTo: assignmentFilter === 'UNASSIGNED' ? ('unassigned' as const) : assignmentFilter === 'ME' ? ('me' as const) : undefined,
+    slaOverdue: slaOverdueOnly || undefined,
+    minPriority: minPriority > 0 ? minPriority : undefined,
+    sort: 'priority' as const,
+    limit: 50,
+  }), [statusFilter, reasonFilter, assignmentFilter, slaOverdueOnly, minPriority]);
+
+  const { data, isLoading, isError, error, refetch } = useReportList(searchParams);
+
+  // 요약 통계
+  const { data: summary } = useQuery({
+    queryKey: ['reports', 'summary'],
+    queryFn: () => reportsApi.getSummary().then((res) => res.data.data),
+  });
 
   const handleRefresh = () => {
+    refetch();
     toast.success('신고 목록을 새로고침했습니다.');
   };
 
-  // 필터링 + 우선순위 정렬
+  const reports = data?.content ?? [];
+
+  // 클라이언트 키워드 필터 (서버에 keyword 파라미터가 없으므로)
   const filteredReports = useMemo(() => {
-    return MOCK_REPORTS
-      .filter((r) => {
-        const matchesKeyword = !keyword || r.reporterNickname.includes(keyword) || r.targetNickname.includes(keyword);
-        const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
-        const matchesReason = reasonFilter === 'ALL' || r.reason === reasonFilter;
-        const matchesAssignment =
-          assignmentFilter === 'ALL' ||
-          (assignmentFilter === 'UNASSIGNED' && r.assignedTo === null) ||
-          (assignmentFilter === 'ME' && r.assignedTo === currentAdminId);
-        const matchesSlaOverdue = !slaOverdueOnly || r.slaStatus === 'OVERDUE';
-        const matchesPriority = r.priorityScore >= minPriority;
-        return matchesKeyword && matchesStatus && matchesReason && matchesAssignment && matchesSlaOverdue && matchesPriority;
-      })
-      .sort((a, b) => b.priorityScore - a.priorityScore);
-  }, [keyword, statusFilter, reasonFilter, assignmentFilter, slaOverdueOnly, minPriority]);
+    if (!keyword) return reports;
+    return reports.filter(
+      (r: Report) =>
+        r.reporterNickname.includes(keyword) || r.targetNickname.includes(keyword),
+    );
+  }, [reports, keyword]);
 
-  // 기능명세서 9.1 요약 카드
-  const unresolvedCount = MOCK_REPORTS.filter((r) => r.status === 'PENDING' || r.status === 'IN_REVIEW').length;
-  const slaApproachingCount = MOCK_REPORTS.filter((r) => r.slaStatus === 'WARNING' && r.status !== 'RESOLVED' && r.status !== 'DISMISSED').length;
-  const slaExceededCount = MOCK_REPORTS.filter((r) => r.slaStatus === 'OVERDUE' && r.status !== 'RESOLVED' && r.status !== 'DISMISSED').length;
-  const unassignedCount = MOCK_REPORTS.filter((r) => r.assignedTo === null && (r.status === 'PENDING' || r.status === 'IN_REVIEW')).length;
-
-  // DataTable 컬럼 정의 (currentAdminId 에 의존하므로 컴포넌트 내부에서 useMemo)
-  const reportColumns: DataTableColumn<MockReport>[] = useMemo(
+  // DataTable 컬럼 정의
+  const reportColumns: DataTableColumn<Report>[] = useMemo(
     () => [
       { key: 'id', header: 'ID', cell: (r) => <span className="font-medium">#{r.id}</span> },
       { key: 'reporter', header: '신고자', cell: (r) => r.reporterNickname },
@@ -264,16 +150,8 @@ export default function ReportsPage() {
         key: 'assignedTo',
         header: '담당자',
         cell: (r) => {
-          const isMyTask = r.assignedTo === currentAdminId;
           return r.assignedAdminName ? (
-            <span className={isMyTask ? 'font-medium text-primary' : ''}>
-              {r.assignedAdminName}
-              {isMyTask && (
-                <Badge variant="outline" className="ml-2 text-[10px]">
-                  내 담당
-                </Badge>
-              )}
-            </span>
+            <span>{r.assignedAdminName}</span>
           ) : (
             <Badge variant="outline" className="text-muted-foreground">
               미배정
@@ -301,7 +179,7 @@ export default function ReportsPage() {
         ),
       },
     ],
-    [currentAdminId],
+    [],
   );
 
   return (
@@ -331,7 +209,7 @@ export default function ReportsPage() {
               <AlertTriangle className="h-5 w-5 text-red-500" />
               <span className="text-sm text-muted-foreground">미처리 전체</span>
             </div>
-            <div className="mt-1 text-2xl font-bold">{unresolvedCount}</div>
+            <div className="mt-1 text-2xl font-bold">{summary?.totalUnresolved ?? '-'}</div>
           </CardContent>
         </Card>
         <Card className="cursor-pointer border-yellow-200">
@@ -340,7 +218,7 @@ export default function ReportsPage() {
               <Clock className="h-5 w-5 text-yellow-500" />
               <span className="text-sm text-muted-foreground">SLA 접근 중 (80%)</span>
             </div>
-            <div className="mt-1 text-2xl font-bold text-yellow-600">{slaApproachingCount}</div>
+            <div className="mt-1 text-2xl font-bold text-yellow-600">{summary?.slaApproaching ?? '-'}</div>
           </CardContent>
         </Card>
         <Card className="cursor-pointer border-red-200" onClick={() => setSlaOverdueOnly(true)}>
@@ -349,7 +227,7 @@ export default function ReportsPage() {
               <ShieldAlert className="h-5 w-5 text-red-500" />
               <span className="text-sm text-muted-foreground">SLA 초과</span>
             </div>
-            <div className="mt-1 text-2xl font-bold text-red-600">{slaExceededCount}</div>
+            <div className="mt-1 text-2xl font-bold text-red-600">{summary?.slaExceeded ?? '-'}</div>
           </CardContent>
         </Card>
         <Card className="cursor-pointer border-gray-200" onClick={() => setAssignmentFilter('UNASSIGNED')}>
@@ -358,7 +236,9 @@ export default function ReportsPage() {
               <Timer className="h-5 w-5 text-gray-500" />
               <span className="text-sm text-muted-foreground">미배정</span>
             </div>
-            <div className="mt-1 text-2xl font-bold text-gray-700">{unassignedCount}</div>
+            <div className="mt-1 text-2xl font-bold text-gray-700">
+              {summary ? (summary.pendingCount ?? '-') : '-'}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -439,14 +319,20 @@ export default function ReportsPage() {
         )}
       </div>
 
+      {/* 로딩/에러 상태 */}
+      {isLoading && <AnalyticsLoading label="신고 목록을 불러오는 중입니다..." />}
+      {isError && <AnalyticsError message={error?.message || '신고 목록을 불러오지 못했습니다.'} />}
+
       {/* 신고 목록 테이블 */}
-      <DataTable
-        columns={reportColumns}
-        data={filteredReports}
-        rowKey={(r) => r.id}
-        rowClassName={(r) => (r.slaStatus === 'OVERDUE' ? 'bg-destructive/5' : undefined)}
-        emptyState="검색 결과가 없습니다."
-      />
+      {!isLoading && !isError && (
+        <DataTable
+          columns={reportColumns}
+          data={filteredReports}
+          rowKey={(r) => r.id}
+          rowClassName={(r) => (r.slaStatus === 'OVERDUE' ? 'bg-destructive/5' : undefined)}
+          emptyState="검색 결과가 없습니다."
+        />
+      )}
     </div>
   );
 }

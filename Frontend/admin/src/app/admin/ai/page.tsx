@@ -1,23 +1,25 @@
 'use client';
 
-// AI 모니터링 메인 페이지 — v2.2 파이프라인 모니터링 위젯 5종 + 기존 AI 성능 지표
+// AI 모니터링 메인 페이지 — v2.2 파이프라인 모니터링 위젯 5종 + AI 성능 지표 (실 API)
 
 import Link from 'next/link';
-import { useState } from 'react';
 import PageHeader from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import KpiCard from '@/components/common/KpiCard';
 import { useAuthStore } from '@/stores/authStore';
-import { monitoringApi } from '@/lib/api/monitoring';
 import {
   useAiOverview,
   useReprocessDlq,
   useRetryOutbox,
   useForceFailDiary,
+  useMqStatus,
+  useRedisHealth,
+  useAnalysisOverview,
 } from '@/hooks/useMonitoring';
-import { Brain, Target, TrendingUp, Activity, Zap } from 'lucide-react';
+import { useAiPerformance } from '@/hooks/useAnalytics';
+import { Brain, Target, TrendingUp, Activity, Zap, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   BarChart,
@@ -34,40 +36,6 @@ import {
   PolarRadiusAxis,
   Legend,
 } from 'recharts';
-
-// Mock data for keyword distribution
-const keywordData = [
-  { category: '감정', positive: 45, negative: 12, neutral: 23 },
-  { category: '라이프스타일', positive: 38, negative: 8, neutral: 34 },
-  { category: '관계스타일', positive: 52, negative: 15, neutral: 18 },
-  { category: '취미', positive: 67, negative: 5, neutral: 28 },
-  { category: '가치관', positive: 41, negative: 19, neutral: 25 },
-];
-
-// Mock data for similarity distribution histogram
-const similarityData = [
-  { range: '0.0-0.2', count: 12 },
-  { range: '0.2-0.4', count: 45 },
-  { range: '0.4-0.6', count: 89 },
-  { range: '0.6-0.8', count: 156 },
-  { range: '0.8-1.0', count: 78 },
-];
-
-// Mock data for emotion radar
-const emotionRadar = [
-  { emotion: '기쁨', value: 85 },
-  { emotion: '설렘', value: 72 },
-  { emotion: '평온', value: 68 },
-  { emotion: '그리움', value: 45 },
-  { emotion: '외로움', value: 32 },
-  { emotion: '불안', value: 18 },
-];
-
-// Mock data for AI model performance
-const modelPerformanceData = [
-  { name: 'KcELECTRA', value: 87.3, color: '#8b5cf6', description: '키워드 추출 정확도' },
-  { name: 'KoSimCSE', value: 72.5, color: '#3b82f6', description: '매칭 성공률' },
-];
 
 // Gauge Chart Component
 function GaugeChart({ value, color, label, description }: { value: number; color: string; label: string; description: string }) {
@@ -128,7 +96,11 @@ export default function AIMonitoringPage() {
   const { hasPermission } = useAuthStore();
 
   // 실 API 연동 — 30초 auto-refresh (Phase 3B)
-  const { data: overview } = useAiOverview();
+  const { data: overview, isLoading: overviewLoading } = useAiOverview();
+  const { data: mqStatus } = useMqStatus();
+  const { data: redisHealth } = useRedisHealth();
+  const { data: analysisOverview } = useAnalysisOverview();
+  const { data: aiPerformance } = useAiPerformance();
   const reprocessDlq = useReprocessDlq();
   const retryOutbox = useRetryOutbox();
   const forceFailDiary = useForceFailDiary();
@@ -175,6 +147,43 @@ export default function AIMonitoringPage() {
   const fmtPercent = (v?: number) => (typeof v === 'number' ? `${(v * 100).toFixed(1)}%` : '—');
   const fmtNum = (v?: number) => (typeof v === 'number' ? v.toLocaleString() : '—');
 
+  // AI 성능 데이터 추출
+  const perfData = aiPerformance as any;
+  const keywordAccuracy = perfData?.kcElectraAccuracy ?? perfData?.keywordAccuracy;
+  const matchSuccessRate = perfData?.koSimCseMatchRate ?? perfData?.matchSuccessRate;
+  const dailyAnalysisCount = perfData?.dailyAnalysisCount ?? analysisOverview?.diary?.done;
+  const avgSimilarity = perfData?.avgSimilarityScore ?? perfData?.avgSimilarity;
+  const dailyKeywordCount = perfData?.dailyKeywordCount;
+
+  // 키워드/유사도 분포 차트 데이터
+  const keywordDistribution = perfData?.keywordDistribution ?? [];
+  const similarityDistribution = perfData?.similarityDistribution ?? [];
+  const emotionDistribution = perfData?.emotionDistribution ?? [];
+
+  // 모델 게이지 데이터
+  const modelPerformanceData = [
+    {
+      name: 'KcELECTRA',
+      value: keywordAccuracy != null ? Number((keywordAccuracy * (keywordAccuracy <= 1 ? 100 : 1)).toFixed(1)) : 0,
+      color: '#8b5cf6',
+      description: '키워드 추출 정확도',
+    },
+    {
+      name: 'KoSimCSE',
+      value: matchSuccessRate != null ? Number((matchSuccessRate * (matchSuccessRate <= 1 ? 100 : 1)).toFixed(1)) : 0,
+      color: '#3b82f6',
+      description: '매칭 성공률',
+    },
+  ];
+
+  if (overviewLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -182,7 +191,7 @@ export default function AIMonitoringPage() {
         description="KcELECTRA 키워드 분석 및 KoSimCSE 매칭 성능 모니터링"
       />
 
-      {/* ─── v2.2 AI 파이프라인 모니터링 섹션 (신규) ─── */}
+      {/* ─── v2.2 AI 파이프라인 모니터링 섹션 ─── */}
       <section className="mb-8">
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -191,7 +200,7 @@ export default function AIMonitoringPage() {
               5개 위젯으로 AI 파이프라인 건강도 실시간 추적
             </p>
           </div>
-          <Badge variant="outline">v2.2 신규</Badge>
+          <Badge variant="outline">v2.2</Badge>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -230,7 +239,7 @@ export default function AIMonitoringPage() {
                 DLQ {fmtNum(overview?.dlqSize)}
               </Link>
               <p className="text-xs text-muted-foreground">
-                5개 큐 실시간 모니터링
+                {mqStatus?.queues?.length ?? 0}개 큐 실시간 모니터링
               </p>
               <p className="text-xs">
                 <Link href="/admin/ai/mq" className="text-primary underline-offset-2 hover:underline">
@@ -277,6 +286,11 @@ export default function AIMonitoringPage() {
             <CardContent className="space-y-1">
               <div className="text-2xl font-bold text-success">{fmtPercent(overview?.redisHitRatio)}</div>
               <p className="text-xs text-muted-foreground">Hit Ratio</p>
+              {redisHealth && (
+                <p className="text-xs text-muted-foreground">
+                  메모리: {redisHealth.memoryUsedMb}MB / {redisHealth.memoryPeakMb}MB
+                </p>
+              )}
               <p className="text-xs">
                 <Link href="/admin/ai/redis" className="text-primary underline-offset-2 hover:underline">
                   캐시 패턴 상세 →
@@ -306,6 +320,11 @@ export default function AIMonitoringPage() {
                   <span className="font-bold text-destructive">{fmtNum(overview?.analysisFailed)}</span>
                 </span>
               </div>
+              {analysisOverview && (
+                <p className="text-xs text-muted-foreground">
+                  완료: {analysisOverview.diary?.done?.toLocaleString() ?? '—'}건
+                </p>
+              )}
               <p className="text-xs">
                 <Link href="/admin/ai/analysis" className="text-primary underline-offset-2 hover:underline">
                   분석 상태 상세 →
@@ -317,41 +336,37 @@ export default function AIMonitoringPage() {
       </section>
 
       {/* KPI Cards */}
-      {/*
-        Phase 2-C (2026-04-21): 5개 Card 블록을 공통 KpiCard로 통합. Phase 2-A 세만틱 토큰
-        준수 차원에서 purple/blue/green 하드코딩을 text-primary / text-info / text-success 로 치환.
-      */}
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           title="키워드 정확도"
-          value="87.3%"
+          value={keywordAccuracy != null ? `${(keywordAccuracy * (keywordAccuracy <= 1 ? 100 : 1)).toFixed(1)}%` : '—'}
           description="KcELECTRA 평균"
           icon={Brain}
           valueClassName="text-primary"
         />
         <KpiCard
           title="매칭 성공률"
-          value="72.5%"
+          value={matchSuccessRate != null ? `${(matchSuccessRate * (matchSuccessRate <= 1 ? 100 : 1)).toFixed(1)}%` : '—'}
           description="교환일기 진행률"
           icon={Target}
           valueClassName="text-info"
         />
         <KpiCard
           title="일일 분석량"
-          value={1234}
+          value={dailyAnalysisCount ?? '—'}
           description="오늘 처리된 일기"
           icon={TrendingUp}
         />
         <KpiCard
           title="평균 유사도"
-          value="0.68"
+          value={avgSimilarity != null ? Number(avgSimilarity).toFixed(2) : '—'}
           description="KoSimCSE 스코어"
           icon={Activity}
           valueClassName="text-success"
         />
         <KpiCard
           title="추출 키워드"
-          value={4521}
+          value={dailyKeywordCount ?? '—'}
           description="오늘 추출된 키워드"
           icon={Zap}
         />
@@ -359,87 +374,93 @@ export default function AIMonitoringPage() {
 
       {/* Charts Row 1 */}
       <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>키워드 카테고리별 분포</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={keywordData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis type="number" stroke="#6b7280" fontSize={12} />
-                <YAxis dataKey="category" type="category" stroke="#6b7280" fontSize={12} width={80} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="positive" name="긍정" fill="#22c55e" stackId="a" />
-                <Bar dataKey="neutral" name="중립" fill="#6b7280" stackId="a" />
-                <Bar dataKey="negative" name="부정" fill="#ef4444" stackId="a" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {keywordDistribution.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>키워드 카테고리별 분포</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={keywordDistribution} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" stroke="#6b7280" fontSize={12} />
+                  <YAxis dataKey="category" type="category" stroke="#6b7280" fontSize={12} width={80} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="positive" name="긍정" fill="#22c55e" stackId="a" />
+                  <Bar dataKey="neutral" name="중립" fill="#6b7280" stackId="a" />
+                  <Bar dataKey="negative" name="부정" fill="#ef4444" stackId="a" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>매칭 유사도 분포 (KoSimCSE)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={similarityData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="range" stroke="#6b7280" fontSize={12} />
-                <YAxis stroke="#6b7280" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
-                  formatter={(value: number) => [`${value}건`, '매칭 수']}
-                />
-                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="매칭 수" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {similarityDistribution.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>매칭 유사도 분포 (KoSimCSE)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={similarityDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="range" stroke="#6b7280" fontSize={12} />
+                  <YAxis stroke="#6b7280" fontSize={12} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                    }}
+                    formatter={(value: number) => [`${value}건`, '매칭 수']}
+                  />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="매칭 수" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Charts Row 2 */}
       <div className="mt-8 grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>감정 분석 레이더</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <RadarChart data={emotionRadar}>
-                <PolarGrid stroke="#e5e7eb" />
-                <PolarAngleAxis dataKey="emotion" stroke="#6b7280" fontSize={12} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#6b7280" fontSize={10} />
-                <Radar
-                  name="감정 점수"
-                  dataKey="value"
-                  stroke="#8b5cf6"
-                  fill="#c4b5fd"
-                  fillOpacity={0.6}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                  }}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {emotionDistribution.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>감정 분석 레이더</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <RadarChart data={emotionDistribution}>
+                  <PolarGrid stroke="#e5e7eb" />
+                  <PolarAngleAxis dataKey="emotion" stroke="#6b7280" fontSize={12} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#6b7280" fontSize={10} />
+                  <Radar
+                    name="감정 점수"
+                    dataKey="value"
+                    stroke="#8b5cf6"
+                    fill="#c4b5fd"
+                    fillOpacity={0.6}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                    }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
