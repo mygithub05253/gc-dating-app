@@ -1308,12 +1308,7 @@ public class AdminAnalyticsService {
               AND last_login_at IS NOT NULL
               AND last_login_at < NOW() - INTERVAL '3 days'
             GROUP BY 1
-            ORDER BY
-              CASE risk_level
-                WHEN 'HIGH' THEN 1
-                WHEN 'MEDIUM' THEN 2
-                WHEN 'LOW' THEN 3
-              END
+            ORDER BY MIN(last_login_at)
             """;
 
         Query query = entityManager.createNativeQuery(sql);
