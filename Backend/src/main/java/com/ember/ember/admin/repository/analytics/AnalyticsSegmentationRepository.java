@@ -53,8 +53,8 @@ public class AnalyticsSegmentationRepository {
                            SUM(CASE WHEN d.analysis_status = 'COMPLETED'
                                     THEN 1 ELSE 0 END)                       AS completed_cnt
                       FROM diaries d
-                     WHERE d.created_at >= :startTs
-                       AND d.created_at <  :endTs
+                     WHERE d.created_at >= CAST(:startTs AS TIMESTAMP)
+                       AND d.created_at <  CAST(:endTs AS TIMESTAMP)
                        AND d.deleted_at IS NULL
                      GROUP BY d.user_id
                 ),
@@ -64,20 +64,20 @@ public class AnalyticsSegmentationRepository {
                            COUNT(*)                                          AS exchange_cnt
                       FROM exchange_diaries ed
                      WHERE ed.submitted_at IS NOT NULL
-                       AND ed.submitted_at >= :startTs
-                       AND ed.submitted_at <  :endTs
+                       AND ed.submitted_at >= CAST(:startTs AS TIMESTAMP)
+                       AND ed.submitted_at <  CAST(:endTs AS TIMESTAMP)
                      GROUP BY ed.author_id
                 )
                 SELECT
                     u.id                                                    AS user_id,
                     -- Recency: 기간 종료일 - 가장 최근 활동. 활동 없으면 (endTs - startTs) 일수로 치환.
                     COALESCE(
-                        EXTRACT(EPOCH FROM (:endTs - GREATEST(
+                        EXTRACT(EPOCH FROM (CAST(:endTs AS TIMESTAMP) - GREATEST(
                             u.last_login_at,
                             da.last_diary_at,
                             ea.last_exchange_at
                         ))) / 86400.0,
-                        EXTRACT(EPOCH FROM (:endTs - :startTs)) / 86400.0
+                        EXTRACT(EPOCH FROM (CAST(:endTs AS TIMESTAMP) - CAST(:startTs AS TIMESTAMP))) / 86400.0
                     )::float                                                AS recency_days,
                     COALESCE(da.diary_cnt, 0)                               AS frequency,
                     -- Engagement: 교환일기 × 2 + AI 완료 일기 × 1
@@ -88,7 +88,7 @@ public class AnalyticsSegmentationRepository {
                   LEFT JOIN exchange_activity ea ON ea.user_id = u.id
                  WHERE u.deleted_at IS NULL
                    AND u.status = 'ACTIVE'
-                   AND u.created_at < :endTs
+                   AND u.created_at < CAST(:endTs AS TIMESTAMP)
                 """;
 
         var query = em.createNativeQuery(sql);

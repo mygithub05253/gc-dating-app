@@ -28,8 +28,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     @Query("""
             SELECT u FROM User u
-             WHERE (:status IS NULL OR u.status = :status)
-               AND (:gender IS NULL OR u.gender = :gender)
+             WHERE (CAST(:status AS string) IS NULL OR u.status = :status)
+               AND (CAST(:gender AS string) IS NULL OR u.gender = :gender)
                AND (:keyword IS NULL
                     OR u.nickname LIKE CONCAT('%', CAST(:keyword AS string), '%')
                     OR u.realName LIKE CONCAT('%', CAST(:keyword AS string), '%'))

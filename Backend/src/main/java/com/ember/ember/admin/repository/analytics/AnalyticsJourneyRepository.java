@@ -63,8 +63,8 @@ public class AnalyticsJourneyRepository {
                           WHERE c.user_a_id = u.id OR c.user_b_id = u.id)        AS t_couple
                       FROM users u
                      WHERE u.deleted_at IS NULL
-                       AND u.created_at >= :startTs
-                       AND u.created_at <  :endTs
+                       AND u.created_at >= CAST(:startTs AS TIMESTAMP)
+                       AND u.created_at <  CAST(:endTs AS TIMESTAMP)
                 ),
                 durations AS (
                     SELECT

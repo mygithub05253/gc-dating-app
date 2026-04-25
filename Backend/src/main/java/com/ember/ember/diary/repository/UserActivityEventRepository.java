@@ -25,7 +25,7 @@ public interface UserActivityEventRepository extends JpaRepository<UserActivityE
             SELECT e FROM UserActivityEvent e
              WHERE e.user.id = :userId
                AND e.occurredAt >= :from
-               AND (:eventType IS NULL OR e.eventType = :eventType)
+               AND (CAST(:eventType AS string) IS NULL OR e.eventType = :eventType)
              ORDER BY e.occurredAt DESC
             """)
     Page<UserActivityEvent> findTimeline(@Param("userId") Long userId,

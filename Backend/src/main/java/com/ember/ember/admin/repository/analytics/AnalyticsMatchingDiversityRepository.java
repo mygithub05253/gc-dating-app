@@ -30,7 +30,7 @@ public class AnalyticsMatchingDiversityRepository {
                 WITH period_recs AS (
                     SELECT m.from_user_id, m.to_user_id, m.created_at
                       FROM matchings m
-                     WHERE m.created_at >= :startTs AND m.created_at < :endTs
+                     WHERE m.created_at >= CAST(:startTs AS TIMESTAMP) AND m.created_at < CAST(:endTs AS TIMESTAMP)
                 ),
                 candidate_dist AS (
                     SELECT to_user_id, COUNT(*) AS cnt
@@ -57,7 +57,7 @@ public class AnalyticsMatchingDiversityRepository {
                          WHERE r2.from_user_id = r.from_user_id
                            AND r2.to_user_id   = r.to_user_id
                            AND r2.created_at   < r.created_at
-                           AND r2.created_at  >= r.created_at - (:rerecDays || ' days')::interval
+                           AND r2.created_at  >= r.created_at - (CAST(:rerecDays AS VARCHAR) || ' days')::interval
                      )
                 )
                 SELECT t.total                                      AS total_recs,
