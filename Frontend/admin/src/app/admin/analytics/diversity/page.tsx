@@ -54,7 +54,7 @@ export default function DiversityAnalyticsPage() {
   // adapter: BE daily → 차트 데이터
   const trendData = useMemo(() => {
     if (!data) return [];
-    return data.daily.map((d: DiversityDailyPoint) => ({
+    return (data.daily ?? []).map((d: DiversityDailyPoint) => ({
       date: d.date,
       entropy: d.shannonEntropy ?? 0,
       uniquePairs: d.uniquePairs,

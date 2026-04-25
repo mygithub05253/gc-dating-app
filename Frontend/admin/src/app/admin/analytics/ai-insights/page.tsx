@@ -63,7 +63,7 @@ export default function AiInsightsPage() {
 
   const modelData = useMemo(() => {
     if (!data) return [];
-    return data.models.map((m: AiModelStat) => ({
+    return (data?.models ?? []).map((m: AiModelStat) => ({
       model: m.model,
       total: m.totalProcessed,
       succeeded: m.succeeded,

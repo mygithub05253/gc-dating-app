@@ -89,7 +89,7 @@ export default function DiaryHeatmapPage() {
   const cellMap = useMemo(() => {
     const m = new Map<string, number>();
     if (data) {
-      data.cells.forEach((c: HeatmapCell) => {
+      (data?.cells ?? []).forEach((c: HeatmapCell) => {
         m.set(`${c.dayOfWeek}-${c.hour}`, c.count);
       });
     }
@@ -98,7 +98,7 @@ export default function DiaryHeatmapPage() {
 
   const maxCount = useMemo(() => {
     if (!data) return 0;
-    return Math.max(0, ...data.cells.map((c) => c.count));
+    return Math.max(0, ...(data?.cells ?? []).map((c) => c.count));
   }, [data]);
 
   // 시간대별 합계
@@ -233,7 +233,7 @@ export default function DiaryHeatmapPage() {
             />
           </div>
 
-          {data.cells.length === 0 ? (
+          {(data?.cells ?? []).length === 0 ? (
             <AnalyticsEmpty height={300} title="해당 기간 작성 데이터가 없습니다" />
           ) : (
             <>

@@ -81,9 +81,9 @@ export default function DiaryEmotionPage() {
   // adapter: BE points → AreaChart 데이터 (date + 각 감정 키)
   const areaData = useMemo(() => {
     if (!data) return [];
-    return data.points.map((p) => {
+    return (data.points ?? []).map((p) => {
       const flat: Record<string, number | string> = { date: p.date };
-      data.topEmotions.forEach((emo) => {
+      (data.topEmotions ?? []).forEach((emo) => {
         flat[emo] = p.counts[emo] ?? 0;
       });
       return flat;
@@ -94,7 +94,7 @@ export default function DiaryEmotionPage() {
   const pieData = useMemo(() => {
     if (!data) return [];
     const totals: Record<string, number> = {};
-    data.points.forEach((p) => {
+    (data.points ?? []).forEach((p) => {
       Object.entries(p.counts).forEach(([k, v]) => {
         totals[k] = (totals[k] ?? 0) + v;
       });
@@ -254,7 +254,7 @@ export default function DiaryEmotionPage() {
                         formatter={(v: number, name: string) => [`${(v * 100).toFixed(1)}%`, name]}
                         contentStyle={TOOLTIP_STYLE}
                       />
-                      {data.topEmotions.map((key, idx) => (
+                      {(data.topEmotions ?? []).map((key, idx) => (
                         <Area
                           key={key}
                           type="monotone"
@@ -270,7 +270,7 @@ export default function DiaryEmotionPage() {
                   </ResponsiveContainer>
 
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                    {data.topEmotions.map((key, idx) => (
+                    {(data.topEmotions ?? []).map((key, idx) => (
                       <div key={key} className="flex items-center gap-1.5">
                         <span className="inline-block h-3 w-6 rounded" style={{ backgroundColor: colorFor(key, idx) }} />
                         <span>{key}</span>

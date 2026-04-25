@@ -48,7 +48,7 @@ export default function FunnelDeepPage() {
   // 신뢰구간 표시를 위해 ciLower / ciUpper 함께 매핑
   const curveData = useMemo(() => {
     if (!data) return [];
-    return data.curve.map((p: SurvivalPoint) => ({
+    return (data?.curve ?? []).map((p: SurvivalPoint) => ({
       day: p.day,
       survival: p.survivalProbability ?? 0,
       ciLower: p.ciLower ?? 0,
@@ -61,7 +61,7 @@ export default function FunnelDeepPage() {
   // D7 / D30 KPI: curve에서 가장 가까운 day 찾기
   const findNearest = (target: number) => {
     if (!data) return null;
-    return data.curve.reduce<SurvivalPoint | null>((best, p) => {
+    return (data?.curve ?? []).reduce<SurvivalPoint | null>((best, p) => {
       if (!best) return p;
       return Math.abs(p.day - target) < Math.abs(best.day - target) ? p : best;
     }, null);

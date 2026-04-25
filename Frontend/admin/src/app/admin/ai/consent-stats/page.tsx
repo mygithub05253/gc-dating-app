@@ -156,11 +156,11 @@ export default function ConsentStatsPage() {
               <CardTitle>일별 추세 (최근 {range === '7d' ? '7일' : '30일'})</CardTitle>
             </CardHeader>
             <CardContent>
-              {statsQuery.data.dailyTrend.length === 0 ? (
+              {(statsQuery.data?.dailyTrend ?? []).length === 0 ? (
                 <AnalyticsEmpty height={240} title="추세 데이터가 없습니다" />
               ) : (
                 <ResponsiveContainer width="100%" height={240}>
-                  <AreaChart data={statsQuery.data.dailyTrend}>
+                  <AreaChart data={statsQuery.data?.dailyTrend ?? []}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis dataKey="date" className="text-xs" />
                     <YAxis className="text-xs" />

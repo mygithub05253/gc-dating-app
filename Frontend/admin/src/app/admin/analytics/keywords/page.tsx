@@ -98,7 +98,7 @@ export default function KeywordsAnalysisPage() {
   const query = useKeywordTop({ startDate, endDate, tagType, limit: 30 });
 
   const data: KeywordTopResponse | undefined = query.data;
-  const rows = useMemo(() => (data ? adaptItems(data.items) : []), [data]);
+  const rows = useMemo(() => (data ? adaptItems(data.items ?? []) : []), [data]);
   const barData = useMemo(() => buildBarData(rows), [rows]);
   const pieData = useMemo(() => buildPieData(rows), [rows]);
   const trendData = useMemo(() => buildTrendData(rows), [rows]);

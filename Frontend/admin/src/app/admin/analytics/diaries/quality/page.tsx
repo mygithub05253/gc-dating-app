@@ -70,16 +70,16 @@ export default function DiaryQualityPage() {
   // adapter: 100자 미만 비율 계산
   const aboveMinRatio = useMemo(() => {
     if (!data) return 0;
-    const totalCount = data.buckets.reduce((s, b) => s + b.count, 0);
+    const totalCount = (data.buckets ?? []).reduce((s, b) => s + b.count, 0);
     if (totalCount === 0) return 0;
-    const belowCount = data.buckets.filter((b) => isBelowMin(b.range)).reduce((s, b) => s + b.count, 0);
+    const belowCount = (data.buckets ?? []).filter((b) => isBelowMin(b.range)).reduce((s, b) => s + b.count, 0);
     return Math.round(((totalCount - belowCount) / totalCount) * 100);
   }, [data]);
 
   // 첫 100자 이상 구간을 ReferenceLine 위치로 사용
   const firstAboveMinRange = useMemo(() => {
     if (!data) return null;
-    return data.buckets.find((b) => !isBelowMin(b.range))?.range ?? null;
+    return (data.buckets ?? []).find((b) => !isBelowMin(b.range))?.range ?? null;
   }, [data]);
 
   const handleDownload = () => {
@@ -176,7 +176,7 @@ export default function DiaryQualityPage() {
             />
           </div>
 
-          {data.buckets.length === 0 ? (
+          {(data.buckets ?? []).length === 0 ? (
             <AnalyticsEmpty height={300} title="해당 기간 일기 데이터가 없습니다" />
           ) : (
             <>
@@ -190,7 +190,7 @@ export default function DiaryQualityPage() {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={data.buckets} margin={{ top: 12, right: 12, left: -8, bottom: 4 }}>
+                    <BarChart data={data.buckets ?? []} margin={{ top: 12, right: 12, left: -8, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis
                         dataKey="range"
@@ -349,7 +349,7 @@ export default function DiaryQualityPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {data.buckets.map((b: LengthBucket) => (
+                        {(data.buckets ?? []).map((b: LengthBucket) => (
                           <TableRow key={b.range}>
                             <TableCell className="pl-4 font-medium">
                               <span

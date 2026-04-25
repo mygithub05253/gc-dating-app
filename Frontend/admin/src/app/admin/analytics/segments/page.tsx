@@ -66,7 +66,7 @@ export default function SegmentAnalysisPage() {
   // adapter: BE rows → 차트 데이터
   const chartRows = useMemo(() => {
     if (!data) return [];
-    return data.rows.map((r, idx) => ({
+    return (data.rows ?? []).map((r, idx) => ({
       label: describeRow(r),
       value: r.value,
       share: ((r.share ?? 0) * 100),
@@ -79,7 +79,7 @@ export default function SegmentAnalysisPage() {
   const genderAgeData = useMemo(() => {
     if (!data) return [];
     const byAge = new Map<string, { age: string; M: number; F: number }>();
-    data.rows.forEach((r) => {
+    (data.rows ?? []).forEach((r) => {
       const age = r.ageGroup ?? '미상';
       if (!byAge.has(age)) byAge.set(age, { age, M: 0, F: 0 });
       const entry = byAge.get(age)!;

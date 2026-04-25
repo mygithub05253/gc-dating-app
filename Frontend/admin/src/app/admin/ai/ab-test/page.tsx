@@ -75,7 +75,7 @@ export default function AIABTestPage() {
   const runningCount = tests.filter(t => t.status === 'RUNNING').length;
   const completedCount = tests.filter(t => t.status === 'COMPLETED').length;
   const totalParticipants = tests.reduce(
-    (sum, t) => sum + t.groups.reduce((s, g) => s + g.userCount, 0), 0
+    (sum, t) => sum + (t.groups ?? []).reduce((s, g) => s + g.userCount, 0), 0
   );
 
   if (isLoading) {
@@ -88,22 +88,23 @@ export default function AIABTestPage() {
 
   // 첫 번째 RUNNING 테스트 성과 비교 데이터
   const runningTest = tests.find(t => t.status === 'RUNNING');
+  const runningGroups = runningTest?.groups ?? [];
   const performanceData = runningTest
     ? [
         {
           metric: '매칭률',
-          groupA: (runningTest.groups[0]?.matchRate ?? 0) * 100,
-          groupB: (runningTest.groups[1]?.matchRate ?? 0) * 100,
+          groupA: (runningGroups[0]?.matchRate ?? 0) * 100,
+          groupB: (runningGroups[1]?.matchRate ?? 0) * 100,
         },
         {
           metric: '교환 완료율',
-          groupA: (runningTest.groups[0]?.exchangeCompletionRate ?? 0) * 100,
-          groupB: (runningTest.groups[1]?.exchangeCompletionRate ?? 0) * 100,
+          groupA: (runningGroups[0]?.exchangeCompletionRate ?? 0) * 100,
+          groupB: (runningGroups[1]?.exchangeCompletionRate ?? 0) * 100,
         },
         {
           metric: '유사도 점수',
-          groupA: (runningTest.groups[0]?.avgMatchScore ?? 0) * 100,
-          groupB: (runningTest.groups[1]?.avgMatchScore ?? 0) * 100,
+          groupA: (runningGroups[0]?.avgMatchScore ?? 0) * 100,
+          groupB: (runningGroups[1]?.avgMatchScore ?? 0) * 100,
         },
       ]
     : [];
@@ -181,8 +182,8 @@ export default function AIABTestPage() {
                 <YAxis stroke="#6b7280" fontSize={12} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="groupA" name={`Group A (${runningTest.groups[0]?.modelVersion ?? 'A'})`} fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="groupB" name={`Group B (${runningTest.groups[1]?.modelVersion ?? 'B'})`} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="groupA" name={`Group A (${runningGroups[0]?.modelVersion ?? 'A'})`} fill="#94a3b8" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="groupB" name={`Group B (${runningGroups[1]?.modelVersion ?? 'B'})`} fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -250,14 +251,14 @@ export default function AIABTestPage() {
 
                 {/* Groups Comparison */}
                 <div className="mt-4 grid md:grid-cols-2 gap-4">
-                  {test.groups.map((group, idx) => (
+                  {(test.groups ?? []).map((group, idx) => (
                     <div
                       key={idx}
-                      className={`p-3 rounded-lg border ${test.isSignificant && idx === 1 && group.matchRate > test.groups[0].matchRate ? 'border-green-500 bg-green-50' : 'bg-muted/30'}`}
+                      className={`p-3 rounded-lg border ${test.isSignificant && idx === 1 && group.matchRate > (test.groups?.[0]?.matchRate ?? 0) ? 'border-green-500 bg-green-50' : 'bg-muted/30'}`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium">Group {group.groupName} ({group.modelVersion})</span>
-                        {test.isSignificant && idx === 1 && group.matchRate > test.groups[0].matchRate && (
+                        {test.isSignificant && idx === 1 && group.matchRate > (test.groups?.[0]?.matchRate ?? 0) && (
                           <CheckCircle className="h-4 w-4 text-green-600" />
                         )}
                       </div>
@@ -272,7 +273,7 @@ export default function AIABTestPage() {
                         </div>
                         <div>
                           <span className="text-muted-foreground">교환 완료율</span>
-                          <p className={`font-bold ${idx === 1 && group.exchangeCompletionRate > test.groups[0].exchangeCompletionRate ? 'text-green-600' : ''}`}>
+                          <p className={`font-bold ${idx === 1 && group.exchangeCompletionRate > (test.groups?.[0]?.exchangeCompletionRate ?? 0) ? 'text-green-600' : ''}`}>
                             {(group.exchangeCompletionRate * 100).toFixed(1)}%
                           </p>
                         </div>

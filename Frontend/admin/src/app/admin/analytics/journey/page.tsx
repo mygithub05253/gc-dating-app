@@ -63,7 +63,7 @@ export default function JourneyAnalysisPage() {
   // adapter: percentile 분포를 BarChart 데이터로 변환
   const barData = useMemo(() => {
     if (!data) return [];
-    return data.stages.map((s: JourneyStageDuration, idx: number) => ({
+    return (data.stages ?? []).map((s: JourneyStageDuration, idx: number) => ({
       stage: STAGE_LABEL_MAP[s.stage] ?? s.stage,
       stageKey: s.stage,
       p50: s.p50Hours ?? 0,

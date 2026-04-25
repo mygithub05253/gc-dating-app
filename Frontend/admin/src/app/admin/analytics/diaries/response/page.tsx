@@ -59,7 +59,7 @@ export default function DiaryResponsePage() {
   // adapter: BE turnRows → 차트 데이터
   const turnBarData = useMemo(() => {
     if (!data) return [];
-    return data.turnRows.map((r) => ({
+    return (data.turnRows ?? []).map((r) => ({
       turn: `${r.turn}턴`,
       responded: r.responded,
       timedOut: r.timedOut,
@@ -70,11 +70,11 @@ export default function DiaryResponsePage() {
   }, [data]);
 
   const totalResponded = useMemo(
-    () => (data ? data.turnRows.reduce((s, r) => s + r.responded, 0) : 0),
+    () => (data ? (data.turnRows ?? []).reduce((s, r) => s + r.responded, 0) : 0),
     [data],
   );
   const totalTimedOut = useMemo(
-    () => (data ? data.turnRows.reduce((s, r) => s + r.timedOut, 0) : 0),
+    () => (data ? (data.turnRows ?? []).reduce((s, r) => s + r.timedOut, 0) : 0),
     [data],
   );
   const totalAttempts = totalResponded + totalTimedOut;
