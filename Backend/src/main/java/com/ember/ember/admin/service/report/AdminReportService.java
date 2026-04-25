@@ -3,8 +3,10 @@ package com.ember.ember.admin.service.report;
 import com.ember.ember.admin.annotation.AdminAction;
 import com.ember.ember.admin.annotation.PiiAccess;
 import com.ember.ember.admin.domain.AdminAccount;
+import com.ember.ember.admin.domain.report.UserReportRestriction;
 import com.ember.ember.admin.dto.report.*;
 import com.ember.ember.admin.repository.AdminAccountRepository;
+import com.ember.ember.admin.repository.report.UserReportRestrictionRepository;
 import com.ember.ember.auth.service.TokenService;
 import com.ember.ember.global.exception.BusinessException;
 import com.ember.ember.global.response.ErrorCode;
@@ -54,6 +56,7 @@ public class AdminReportService {
     private final SanctionHistoryRepository sanctionHistoryRepository;
     private final ReportPriorityCalculator priorityCalculator;
     private final TokenService tokenService;
+    private final UserReportRestrictionRepository restrictionRepository;
 
     // ── §5.1 목록 ───────────────────────────────────────────────────────────
     public Page<AdminReportListItemResponse> list(Report.ReportStatus status,
@@ -276,6 +279,32 @@ public class AdminReportService {
     }
 
     // ── 내부 유틸 ───────────────────────────────────────────────────────────
+    // ── §5.13 허위 신고 반복자 제재 ─────────────────────────────────────────
+    /**
+     * 허위 신고 반복자에게 신고 제출 제한을 부과한다.
+     */
+    @Transactional
+    @AdminAction(action = "REPORT_RESTRICT_USER", targetType = "USER", targetIdParam = "userId")
+    public ReportRestrictionResponse restrictAbusiveReporter(Long userId,
+                                                              ReportRestrictionRequest request,
+                                                              CustomUserDetails admin) {
+        if (!userRepository.existsById(userId)) {
+            throw new BusinessException(ErrorCode.ADM_USER_NOT_FOUND);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        restrictionRepository.findActiveByUserId(userId, now)
+                .ifPresent(r -> { throw new BusinessException(ErrorCode.ADM_REPORT_RESTRICTION_EXISTS); });
+
+        LocalDateTime until = now.plusHours(request.durationHours());
+        UserReportRestriction restriction = UserReportRestriction.create(
+                userId, until, admin.getUserId(), request.adminMemo());
+        restrictionRepository.save(restriction);
+
+        log.info("[REPORT_RESTRICT] userId={} until={} adminId={}", userId, until, admin.getUserId());
+        return ReportRestrictionResponse.from(restriction);
+    }
+
     private Report loadReport(Long reportId) {
         return reportRepository.findById(reportId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ADM_REPORT_NOT_FOUND));

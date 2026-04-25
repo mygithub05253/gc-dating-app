@@ -55,4 +55,28 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Lo
                                          @Param("endAt") LocalDateTime endAt,
                                          @Param("search") String search,
                                          Pageable pageable);
+
+    /**
+     * 약관 변경 이력 조회 — §10 약관 관리.
+     * targetType = 'TERMS'인 감사 로그를 조회한다.
+     */
+    @Query(value = """
+            SELECT l
+              FROM AdminAuditLog l
+              JOIN FETCH l.admin a
+             WHERE l.targetType = 'TERMS'
+               AND (CAST(:targetId AS long) IS NULL OR l.targetId = :targetId)
+               AND (:actionFilter IS NULL OR l.action LIKE CONCAT('%', CAST(:actionFilter AS string), '%'))
+             ORDER BY l.performedAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(l)
+              FROM AdminAuditLog l
+             WHERE l.targetType = 'TERMS'
+               AND (CAST(:targetId AS long) IS NULL OR l.targetId = :targetId)
+               AND (:actionFilter IS NULL OR l.action LIKE CONCAT('%', CAST(:actionFilter AS string), '%'))
+            """)
+    Page<AdminAuditLog> searchTermsHistory(@Param("targetId") Long targetId,
+                                            @Param("actionFilter") String actionFilter,
+                                            Pageable pageable);
 }

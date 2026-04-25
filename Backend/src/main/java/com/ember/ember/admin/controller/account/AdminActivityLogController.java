@@ -3,6 +3,7 @@ package com.ember.ember.admin.controller.account;
 import com.ember.ember.admin.annotation.SuperAdminOnly;
 import com.ember.ember.admin.dto.AdminAuditLogResponse;
 import com.ember.ember.admin.service.AdminAccountService;
+import com.ember.ember.admin.service.AdminAuditExportService;
 import com.ember.ember.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -12,6 +13,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,6 +36,7 @@ import java.time.LocalDate;
 public class AdminActivityLogController {
 
     private final AdminAccountService adminAccountService;
+    private final AdminAuditExportService adminAuditExportService;
 
     /** §13.8 관리자 활동 로그 페이지네이션 조회 */
     @GetMapping
@@ -48,5 +52,22 @@ public class AdminActivityLogController {
             @PageableDefault(size = 50) Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(
                 adminAccountService.searchAuditLogs(adminId, action, targetType, startDate, endDate, search, pageable)));
+    }
+
+    /** §13.9 관리자 활동 로그 CSV 내보내기 (SUPER_ADMIN) */
+    @GetMapping("/export")
+    @Operation(summary = "관리자 활동 로그 CSV 내보내기",
+            description = "최대 10,000건까지 CSV로 내보낸다. SUPER_ADMIN 전용.")
+    public ResponseEntity<byte[]> exportCsv(
+            @RequestParam(required = false) Long adminId,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String targetType,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        byte[] csv = adminAuditExportService.exportCsv(adminId, action, targetType, startDate, endDate);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=activity-logs.csv")
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(csv);
     }
 }

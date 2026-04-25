@@ -4,6 +4,8 @@ import com.ember.ember.admin.annotation.AdminOnly;
 import com.ember.ember.admin.dto.notice.AdminNoticeDto.CreateRequest;
 import com.ember.ember.admin.dto.notice.AdminNoticeDto.NoticeResponse;
 import com.ember.ember.admin.dto.notice.AdminNoticeDto.UpdateRequest;
+import com.ember.ember.admin.dto.notice.NoticeStatusRequest;
+import com.ember.ember.admin.dto.notice.NoticeStatusResponse;
 import com.ember.ember.admin.service.notice.AdminNoticeService;
 import com.ember.ember.global.response.ApiResponse;
 import com.ember.ember.global.security.CustomUserDetails;
@@ -68,6 +70,16 @@ public class AdminNoticeController {
             @Valid @RequestBody UpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 adminNoticeService.update(noticeId, request)));
+    }
+
+    @PatchMapping("/{noticeId}/status")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    @Operation(summary = "공지사항 상태 변경", description = "PUBLISHED/DRAFT 상태로 변경한다. 약관 공지 숨김 시 경고 메시지 포함.")
+    public ResponseEntity<ApiResponse<NoticeStatusResponse>> changeStatus(
+            @PathVariable Long noticeId,
+            @Valid @RequestBody NoticeStatusRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminNoticeService.changeStatus(noticeId, request.status())));
     }
 
     @DeleteMapping("/{noticeId}")

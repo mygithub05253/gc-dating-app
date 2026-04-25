@@ -201,7 +201,43 @@ public enum ErrorCode {
     ADM_INQUIRY_NOT_FOUND("ADM044", HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
     ADM_INQUIRY_ALREADY_RESOLVED("ADM045", HttpStatus.BAD_REQUEST, "이미 답변된 문의입니다."),
     ADM_APPEAL_NOT_FOUND("ADM046", HttpStatus.NOT_FOUND, "이의신청을 찾을 수 없습니다."),
-    ADM_APPEAL_ALREADY_DECIDED("ADM047", HttpStatus.BAD_REQUEST, "이미 처리된 이의신청입니다.");
+    ADM_APPEAL_ALREADY_DECIDED("ADM047", HttpStatus.BAD_REQUEST, "이미 처리된 이의신청입니다."),
+
+    // §14 RBAC
+    ADM_RBAC_REQUIRED_PERMISSION("ADM048", HttpStatus.BAD_REQUEST, "SUPER_ADMIN 필수 권한은 제거할 수 없습니다."),
+
+    // §15 이벤트/프로모션
+    ADM_EVENT_NOT_FOUND("ADM049", HttpStatus.NOT_FOUND, "존재하지 않는 이벤트입니다."),
+    ADM_EVENT_INVALID_STATUS("ADM050", HttpStatus.BAD_REQUEST, "유효하지 않은 상태 전환입니다."),
+    ADM_EVENT_INVALID_DATE("ADM051", HttpStatus.BAD_REQUEST, "시작일은 종료일보다 이전이어야 합니다."),
+
+    // §16 탈퇴 분석
+    ADM_WITHDRAWAL_DATE_INVALID("ADM052", HttpStatus.BAD_REQUEST, "날짜 형식이 올바르지 않습니다."),
+
+    // §19 시스템 관리
+    ADM_FEATURE_FLAG_NOT_FOUND("ADM053", HttpStatus.NOT_FOUND, "존재하지 않는 기능 플래그입니다."),
+    ADM_FEATURE_FLAG_HISTORY_NOT_FOUND("ADM054", HttpStatus.NOT_FOUND, "존재하지 않는 변경 이력입니다."),
+    ADM_BATCH_JOB_NOT_FOUND("ADM055", HttpStatus.NOT_FOUND, "존재하지 않는 배치 작업입니다."),
+    ADM_BATCH_JOB_ALREADY_RUNNING("ADM056", HttpStatus.CONFLICT, "이미 실행 중인 배치 작업입니다."),
+    ADM_BATCH_JOB_NOT_RUNNING("ADM057", HttpStatus.BAD_REQUEST, "실행 중이 아닌 배치 작업입니다."),
+
+    // §20 운영 효율화
+    ADM_AUTO_RULE_NOT_FOUND("ADM058", HttpStatus.NOT_FOUND, "존재하지 않는 자동화 규칙입니다."),
+    ADM_EXPORT_NOT_FOUND("ADM059", HttpStatus.NOT_FOUND, "존재하지 않는 내보내기 요청입니다."),
+    ADM_EXPORT_LIMIT_EXCEEDED("ADM060", HttpStatus.BAD_REQUEST, "내보내기는 최대 10,000건까지 지원합니다."),
+
+    // §5 허위 신고 제한
+    ADM_USER_REPORT_RESTRICTED("ADM061", HttpStatus.FORBIDDEN, "신고 제출이 제한된 사용자입니다."),
+
+    // §2 대시보드
+    ADM_DASHBOARD_DATE_INVALID("ADM062", HttpStatus.BAD_REQUEST, "조회 기간이 올바르지 않습니다."),
+
+    // §24 키워드 벡터
+    ADM_VECTOR_REBUILD_IN_PROGRESS("ADM063", HttpStatus.CONFLICT, "벡터 재계산이 이미 진행 중입니다."),
+
+    // §5 차단 집중 대상 / 허위 신고 제한 보강
+    ADM_EXCHANGE_ROOM_NOT_FOUND("ADM064", HttpStatus.NOT_FOUND, "존재하지 않는 교환일기 방입니다."),
+    ADM_REPORT_RESTRICTION_EXISTS("ADM065", HttpStatus.CONFLICT, "해당 사용자에게 이미 활성 신고 제한이 있습니다.");
 
     private final String code;
     private final HttpStatus status;

@@ -77,4 +77,13 @@ public class AdminTopicController {
         adminTopicService.rescheduleForWeek(week, request.topicId(), request.overrideReason());
         return ResponseEntity.ok(ApiResponse.success());
     }
+
+    /** 주간 주제 스케줄 조회 (향후 배정된 주제 목록). */
+    @GetMapping("/schedule")
+    @Operation(summary = "주제 스케줄 조회",
+            description = "앞으로 배정된 주간 주제 목록을 반환한다.")
+    public ResponseEntity<ApiResponse<java.util.List<AdminTopicScheduleResponse>>> schedule(
+            @RequestParam(defaultValue = "8") int weeks) {
+        return ResponseEntity.ok(ApiResponse.success(adminTopicService.getSchedule(weeks)));
+    }
 }

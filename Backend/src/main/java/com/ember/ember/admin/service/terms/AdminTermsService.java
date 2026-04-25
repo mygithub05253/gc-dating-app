@@ -5,6 +5,8 @@ import com.ember.ember.admin.domain.terms.Terms;
 import com.ember.ember.admin.dto.terms.AdminTermsDto.CreateRequest;
 import com.ember.ember.admin.dto.terms.AdminTermsDto.TermsResponse;
 import com.ember.ember.admin.dto.terms.AdminTermsDto.UpdateRequest;
+import com.ember.ember.admin.dto.terms.TermsHistoryResponse;
+import com.ember.ember.admin.repository.AdminAuditLogRepository;
 import com.ember.ember.admin.repository.terms.TermsRepository;
 import com.ember.ember.global.exception.BusinessException;
 import com.ember.ember.global.response.ErrorCode;
@@ -28,6 +30,7 @@ public class AdminTermsService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final TermsRepository termsRepository;
+    private final AdminAuditLogRepository adminAuditLogRepository;
 
     // ── §10 목록 ─────────────────────────────────────────────
 
@@ -92,6 +95,33 @@ public class AdminTermsService {
         }
         terms.updateStatus(Terms.TermsStatus.ARCHIVED);
         log.info("[TERMS_ARCHIVE] termsId={}", termsId);
+    }
+
+    // ── §10 변경 이력 ─────────────────────────────────────────
+
+    /**
+     * 약관 변경 이력 조회.
+     * admin_audit_logs 에서 targetType='TERMS' 인 로그를 페이징 조회한다.
+     * type 파라미터가 있으면 action 필터로 활용 (예: USER_TERMS → action LIKE '%USER_TERMS%').
+     */
+    public Page<TermsHistoryResponse> getHistory(String type, Long termId, int page, int size) {
+        int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), safeSize);
+
+        // type 파라미터를 action 필터로 변환 (null이면 전체)
+        String actionFilter = (type == null || type.isBlank()) ? null : type.trim();
+
+        return adminAuditLogRepository.searchTermsHistory(termId, actionFilter, pageable)
+                .map(log -> new TermsHistoryResponse(
+                        log.getId(),
+                        log.getAdmin().getId(),
+                        log.getAdmin().getName(),
+                        log.getAction(),
+                        log.getTargetId(),
+                        log.getDetail(),
+                        log.getIpAddress(),
+                        log.getPerformedAt()
+                ));
     }
 
     // ── private helpers ──────────────────────────────────────

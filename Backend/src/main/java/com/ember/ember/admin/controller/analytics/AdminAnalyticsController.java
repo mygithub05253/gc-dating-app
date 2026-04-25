@@ -3,6 +3,10 @@ package com.ember.ember.admin.controller.analytics;
 import com.ember.ember.admin.annotation.AdminOnly;
 import com.ember.ember.admin.dto.analytics.AiPerformanceResponse;
 import com.ember.ember.admin.dto.analytics.AssociationRulesResponse;
+import com.ember.ember.admin.dto.analytics.ChurnAtRiskResponse;
+import com.ember.ember.admin.dto.analytics.ChurnFunnelResponse;
+import com.ember.ember.admin.dto.analytics.ChurnReasonsResponse;
+import com.ember.ember.admin.dto.analytics.ChurnTimelineResponse;
 import com.ember.ember.admin.dto.analytics.CohortRetentionResponse;
 import com.ember.ember.admin.dto.analytics.DiaryEmotionTrendResponse;
 import com.ember.ember.admin.dto.analytics.DiaryLengthQualityResponse;
@@ -10,6 +14,7 @@ import com.ember.ember.admin.dto.analytics.DiaryTimeHeatmapResponse;
 import com.ember.ember.admin.dto.analytics.DiaryTopicParticipationResponse;
 import com.ember.ember.admin.dto.analytics.ExchangeResponseRateResponse;
 import com.ember.ember.admin.dto.analytics.ExchangeTurnFunnelResponse;
+import com.ember.ember.admin.dto.analytics.InactiveUsersSummaryResponse;
 import com.ember.ember.admin.dto.analytics.JourneyDurationResponse;
 import com.ember.ember.admin.dto.analytics.KeywordTopResponse;
 import com.ember.ember.admin.dto.analytics.MatchingDiversityResponse;
@@ -18,6 +23,8 @@ import com.ember.ember.admin.dto.analytics.RetentionSurvivalResponse;
 import com.ember.ember.admin.dto.analytics.SegmentOverviewResponse;
 import com.ember.ember.admin.dto.analytics.UserFunnelResponse;
 import com.ember.ember.admin.dto.analytics.UserSegmentationResponse;
+import com.ember.ember.admin.dto.analytics.WithdrawalReasonResponse;
+import com.ember.ember.admin.dto.analytics.WithdrawalStatsResponse;
 import com.ember.ember.admin.service.analytics.AdminAnalyticsService;
 import com.ember.ember.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -431,5 +438,102 @@ public class AdminAnalyticsController {
 
         return ResponseEntity.ok(ApiResponse.success(
                 adminAnalyticsService.getCohortRetention(start, end, maxWeeks)));
+    }
+
+    // ------------------------------------------------------------------------
+    // §18 이탈 타임라인 — 3-H.1
+    // ------------------------------------------------------------------------
+    @GetMapping("/churn/timeline")
+    @Operation(summary = "이탈 타임라인",
+            description = "last_login_at 간격 30일 초과 사용자의 일별/주별 이탈 추이. "
+                    + "period=30d|90d|180d(기본 90d), granularity=daily|weekly(기본 daily).")
+    public ResponseEntity<ApiResponse<ChurnTimelineResponse>> getChurnTimeline(
+            @RequestParam(required = false, defaultValue = "90d") String period,
+            @RequestParam(required = false, defaultValue = "daily") String granularity) {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getChurnTimeline(period, granularity)));
+    }
+
+    // ------------------------------------------------------------------------
+    // §18 이탈 사유 분석 — 3-H.2
+    // ------------------------------------------------------------------------
+    @GetMapping("/churn/reasons")
+    @Operation(summary = "이탈 사유 분석",
+            description = "이탈 사용자의 마지막 활동 패턴 기반 추정 이탈 사유 집계.")
+    public ResponseEntity<ApiResponse<ChurnReasonsResponse>> getChurnReasons() {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getChurnReasons()));
+    }
+
+    // ------------------------------------------------------------------------
+    // §18 이탈 위험 사용자 수 — 3-H.3
+    // ------------------------------------------------------------------------
+    @GetMapping("/churn/at-risk-count")
+    @Operation(summary = "이탈 위험 사용자 수",
+            description = "HIGH=14일+ 미접속, MEDIUM=7~14일, LOW=3~7일.")
+    public ResponseEntity<ApiResponse<ChurnAtRiskResponse>> getChurnAtRiskCount() {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getChurnAtRiskCount()));
+    }
+
+    // ------------------------------------------------------------------------
+    // §18 비활성 사용자 요약 — 3-H.4
+    // ------------------------------------------------------------------------
+    @GetMapping("/inactive-users/summary")
+    @Operation(summary = "비활성 사용자 요약",
+            description = "last_login_at 기반 비활성 기간 구간별 사용자 수 + 재활성화율.")
+    public ResponseEntity<ApiResponse<InactiveUsersSummaryResponse>> getInactiveUsersSummary() {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getInactiveUsersSummary()));
+    }
+
+    // ------------------------------------------------------------------------
+    // §18 탈퇴 통계 — 3-H.5
+    // ------------------------------------------------------------------------
+    @GetMapping("/withdrawal/stats")
+    @Operation(summary = "탈퇴 통계",
+            description = "user_withdrawal_log 기반 기간별 탈퇴 통계, 사유별 집계, 일별 추이.")
+    public ResponseEntity<ApiResponse<WithdrawalStatsResponse>> getWithdrawalStats(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getWithdrawalStats(startDate, endDate)));
+    }
+
+    // ------------------------------------------------------------------------
+    // §18 탈퇴 사유 상세 — 3-H.6
+    // ------------------------------------------------------------------------
+    @GetMapping("/withdrawal/reasons")
+    @Operation(summary = "탈퇴 사유 상세 목록 (페이징)",
+            description = "탈퇴 사유별 상세 목록. reason 필터 가능.")
+    public ResponseEntity<ApiResponse<WithdrawalReasonResponse>> getWithdrawalReasons(
+            @RequestParam(required = false) String reason,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "20") int size) {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getWithdrawalReasons(reason, page, size)));
+    }
+
+    // ------------------------------------------------------------------------
+    // §18 사용자 퍼널 (이탈 분석용) — 3-H.7
+    // ------------------------------------------------------------------------
+    @GetMapping("/funnel")
+    @Operation(summary = "사용자 퍼널 분석 (이탈 분석용)",
+            description = "signup→profile→first_diary→first_match→exchange→couple 6단 퍼널. "
+                    + "period=7d|30d|90d(기본 30d), cohort=signup_date|first_match_date.")
+    public ResponseEntity<ApiResponse<ChurnFunnelResponse>> getUserChurnFunnel(
+            @RequestParam(required = false, defaultValue = "30d") String period,
+            @RequestParam(required = false, defaultValue = "signup_date") String cohort) {
+
+        return ResponseEntity.ok(ApiResponse.success(
+                adminAnalyticsService.getUserChurnFunnel(period, cohort)));
     }
 }

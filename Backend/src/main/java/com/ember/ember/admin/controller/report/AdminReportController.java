@@ -124,4 +124,17 @@ public class AdminReportController {
         adminReportService.assignReport(reportId, request, admin);
         return ResponseEntity.ok(ApiResponse.success());
     }
+
+    /** §5.13 허위 신고 반복자 제재. */
+    @PostMapping("/abusive-reporters/{userId}/restrict")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    @Operation(summary = "허위 신고 반복자 제한",
+            description = "지정 시간(기본 48h) 동안 신고 제출을 제한한다.")
+    public ResponseEntity<ApiResponse<ReportRestrictionResponse>> restrictAbusiveReporter(
+            @PathVariable Long userId,
+            @Valid @RequestBody ReportRestrictionRequest request,
+            @AuthenticationPrincipal CustomUserDetails admin) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminReportService.restrictAbusiveReporter(userId, request, admin)));
+    }
 }
