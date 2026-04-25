@@ -30,7 +30,7 @@ public interface UrlWhitelistRepository extends JpaRepository<UrlWhitelist, Long
     @Query("""
             SELECT u FROM UrlWhitelist u
             WHERE (:isActive IS NULL OR u.isActive = :isActive)
-              AND (:q IS NULL OR LOWER(u.domain) LIKE LOWER(CONCAT('%', :q, '%')))
+              AND (:q IS NULL OR LOWER(u.domain) LIKE LOWER(CONCAT('%', CAST(:q AS string), '%')))
             """)
     Page<UrlWhitelist> search(@Param("isActive") Boolean isActive,
                               @Param("q") String q,

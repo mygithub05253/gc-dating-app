@@ -18,7 +18,7 @@ public interface ContactDetectionRepository extends JpaRepository<ContactDetecti
             LEFT JOIN FETCH d.reviewedBy r
             WHERE (:status IS NULL OR d.status = :status)
               AND (:patternType IS NULL OR d.patternType = :patternType)
-              AND (:since IS NULL OR d.detectedAt >= :since)
+              AND (CAST(:since AS timestamp) IS NULL OR d.detectedAt >= :since)
             ORDER BY d.detectedAt DESC
             """)
     Page<ContactDetection> searchForAdmin(
@@ -30,7 +30,7 @@ public interface ContactDetectionRepository extends JpaRepository<ContactDetecti
     /** 패턴 타입별 카운트 (통계 위젯용). */
     @Query("""
             SELECT d.patternType, COUNT(d) FROM ContactDetection d
-            WHERE (:since IS NULL OR d.detectedAt >= :since)
+            WHERE (CAST(:since AS timestamp) IS NULL OR d.detectedAt >= :since)
             GROUP BY d.patternType
             """)
     List<Object[]> countByPatternType(@Param("since") LocalDateTime since);

@@ -25,11 +25,11 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Lo
             SELECT l
               FROM AdminAuditLog l
               JOIN FETCH l.admin a
-             WHERE (:adminId    IS NULL OR a.id = :adminId)
+             WHERE (CAST(:adminId AS long) IS NULL OR a.id = :adminId)
                AND (:action     IS NULL OR l.action = :action)
                AND (:targetType IS NULL OR l.targetType = :targetType)
-               AND (:startAt    IS NULL OR l.performedAt >= :startAt)
-               AND (:endAt      IS NULL OR l.performedAt <  :endAt)
+               AND (CAST(:startAt AS timestamp) IS NULL OR l.performedAt >= :startAt)
+               AND (CAST(:endAt AS timestamp) IS NULL OR l.performedAt <  :endAt)
                AND (:search     IS NULL
                     OR LOWER(l.ipAddress) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
                     OR LOWER(l.detail)    LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
@@ -39,11 +39,11 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Lo
             SELECT COUNT(l)
               FROM AdminAuditLog l
               JOIN l.admin a
-             WHERE (:adminId    IS NULL OR a.id = :adminId)
+             WHERE (CAST(:adminId AS long) IS NULL OR a.id = :adminId)
                AND (:action     IS NULL OR l.action = :action)
                AND (:targetType IS NULL OR l.targetType = :targetType)
-               AND (:startAt    IS NULL OR l.performedAt >= :startAt)
-               AND (:endAt      IS NULL OR l.performedAt <  :endAt)
+               AND (CAST(:startAt AS timestamp) IS NULL OR l.performedAt >= :startAt)
+               AND (CAST(:endAt AS timestamp) IS NULL OR l.performedAt <  :endAt)
                AND (:search     IS NULL
                     OR LOWER(l.ipAddress) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))
                     OR LOWER(l.detail)    LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')))
