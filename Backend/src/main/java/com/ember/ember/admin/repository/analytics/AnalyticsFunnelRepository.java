@@ -58,8 +58,8 @@ public class AnalyticsFunnelRepository {
         String sql = """
                 WITH date_series AS (
                     SELECT generate_series(
-                               :startDate::date,
-                               (:endDate::date - INTERVAL '1 day')::date,
+                               CAST(:startDate AS date),
+                               (CAST(:endDate AS date) - INTERVAL '1 day')::date,
                                INTERVAL '1 day'
                            )::date AS d
                 ),

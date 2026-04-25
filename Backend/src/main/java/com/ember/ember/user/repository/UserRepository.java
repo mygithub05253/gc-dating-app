@@ -31,7 +31,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
              WHERE (:status IS NULL OR u.status = :status)
                AND (:gender IS NULL OR u.gender = :gender)
                AND (:keyword IS NULL
-                    OR LOWER(u.email)    LIKE LOWER(CONCAT('%', :keyword, '%'))
                     OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
                     OR LOWER(u.realName) LIKE LOWER(CONCAT('%', :keyword, '%')))
             """)
