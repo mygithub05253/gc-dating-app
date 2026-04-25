@@ -1188,13 +1188,13 @@ public class AdminAnalyticsService {
               WHERE u.deleted_at IS NULL
                 AND u.last_login_at IS NOT NULL
                 AND u.last_login_at < NOW() - INTERVAL '30 days'
-                AND u.last_login_at >= :start::timestamp
-                AND u.last_login_at < :end::timestamp
+                AND u.last_login_at >= CAST(:start AS timestamp)
+                AND u.last_login_at < CAST(:end AS timestamp)
             ),
             total_active AS (
               SELECT COUNT(*) AS cnt FROM users
               WHERE deleted_at IS NULL AND last_login_at IS NOT NULL
-                AND last_login_at >= :start::timestamp AND last_login_at < :end::timestamp
+                AND last_login_at >= CAST(:start AS timestamp) AND last_login_at < CAST(:end AS timestamp)
             )
             SELECT c.churn_date, COUNT(*) AS churn_count,
                    CASE WHEN ta.cnt > 0 THEN COUNT(*)::double precision / ta.cnt ELSE NULL END AS churn_rate
@@ -1251,9 +1251,9 @@ public class AdminAnalyticsService {
             user_activity AS (
               SELECT cu.id AS user_id,
                 (SELECT COUNT(*) FROM diaries d WHERE d.author_id = cu.id) AS diary_count,
-                (SELECT COUNT(*) FROM matchings m WHERE (m.requester_id = cu.id OR m.responder_id = cu.id) AND m.status = 'MATCHED') AS match_count,
-                (SELECT COUNT(*) FROM exchange_rooms er WHERE (er.user1_id = cu.id OR er.user2_id = cu.id)) AS exchange_count,
-                (SELECT COUNT(*) FROM chat_rooms cr WHERE (cr.user1_id = cu.id OR cr.user2_id = cu.id)) AS chat_count
+                (SELECT COUNT(*) FROM matchings m WHERE (m.from_user_id = cu.id OR m.to_user_id = cu.id) AND m.status = 'MATCHED') AS match_count,
+                (SELECT COUNT(*) FROM exchange_rooms er WHERE (er.user_a_id = cu.id OR er.user_b_id = cu.id)) AS exchange_count,
+                (SELECT COUNT(*) FROM chat_rooms cr WHERE (cr.user_a_id = cu.id OR cr.user_b_id = cu.id)) AS chat_count
               FROM churned_users cu
             )
             SELECT
@@ -1401,7 +1401,7 @@ public class AdminAnalyticsService {
         // 전체 탈퇴 수
         String totalSql = """
             SELECT COUNT(*) FROM user_withdrawal_log
-            WHERE withdrawn_at >= :start::timestamp AND withdrawn_at < :end::timestamp
+            WHERE withdrawn_at >= CAST(:start AS timestamp) AND withdrawn_at < CAST(:end AS timestamp)
             """;
         Query totalQuery = entityManager.createNativeQuery(totalSql);
         totalQuery.setParameter("start", start.toString());
@@ -1419,7 +1419,7 @@ public class AdminAnalyticsService {
         String reasonSql = """
             SELECT COALESCE(reason, 'UNKNOWN') AS reason, COUNT(*) AS cnt
             FROM user_withdrawal_log
-            WHERE withdrawn_at >= :start::timestamp AND withdrawn_at < :end::timestamp
+            WHERE withdrawn_at >= CAST(:start AS timestamp) AND withdrawn_at < CAST(:end AS timestamp)
             GROUP BY reason ORDER BY cnt DESC
             """;
         Query reasonQuery = entityManager.createNativeQuery(reasonSql);
@@ -1439,7 +1439,7 @@ public class AdminAnalyticsService {
         String trendSql = """
             SELECT (withdrawn_at AT TIME ZONE 'Asia/Seoul')::date AS d, COUNT(*)
             FROM user_withdrawal_log
-            WHERE withdrawn_at >= :start::timestamp AND withdrawn_at < :end::timestamp
+            WHERE withdrawn_at >= CAST(:start AS timestamp) AND withdrawn_at < CAST(:end AS timestamp)
             GROUP BY d ORDER BY d
             """;
         Query trendQuery = entityManager.createNativeQuery(trendSql);
@@ -1526,23 +1526,23 @@ public class AdminAnalyticsService {
         String sql = """
             SELECT
               (SELECT COUNT(*) FROM users
-               WHERE deleted_at IS NULL AND created_at >= :start::timestamp AND created_at < :end::timestamp) AS signups,
+               WHERE deleted_at IS NULL AND created_at >= CAST(:start AS timestamp) AND created_at < CAST(:end AS timestamp)) AS signups,
               (SELECT COUNT(DISTINCT u.id) FROM users u
-               JOIN user_profiles up ON up.user_id = u.id
-               WHERE u.deleted_at IS NULL AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS profiles,
+               WHERE u.deleted_at IS NULL AND u.onboarding_step >= 1
+                 AND u.created_at >= CAST(:start AS timestamp) AND u.created_at < CAST(:end AS timestamp)) AS profiles,
               (SELECT COUNT(DISTINCT d.author_id) FROM diaries d
                JOIN users u ON u.id = d.author_id
-               WHERE u.deleted_at IS NULL AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS first_diary,
-              (SELECT COUNT(DISTINCT CASE WHEN m.requester_id = u.id THEN u.id ELSE u.id END)
-               FROM matchings m JOIN users u ON u.id = m.requester_id OR u.id = m.responder_id
+               WHERE u.deleted_at IS NULL AND u.created_at >= CAST(:start AS timestamp) AND u.created_at < CAST(:end AS timestamp)) AS first_diary,
+              (SELECT COUNT(DISTINCT CASE WHEN m.from_user_id = u.id THEN u.id ELSE u.id END)
+               FROM matchings m JOIN users u ON u.id = m.from_user_id OR u.id = m.to_user_id
                WHERE m.status = 'MATCHED' AND u.deleted_at IS NULL
-                 AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS first_match,
-              (SELECT COUNT(DISTINCT CASE WHEN er.user1_id = u.id THEN u.id ELSE u.id END)
-               FROM exchange_rooms er JOIN users u ON u.id = er.user1_id OR u.id = er.user2_id
-               WHERE u.deleted_at IS NULL AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS exchange,
-              (SELECT COUNT(DISTINCT CASE WHEN c.user1_id = u.id THEN u.id ELSE u.id END)
-               FROM couples c JOIN users u ON u.id = c.user1_id OR u.id = c.user2_id
-               WHERE u.deleted_at IS NULL AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS couple
+                 AND u.created_at >= CAST(:start AS timestamp) AND u.created_at < CAST(:end AS timestamp)) AS first_match,
+              (SELECT COUNT(DISTINCT CASE WHEN er.user_a_id = u.id THEN u.id ELSE u.id END)
+               FROM exchange_rooms er JOIN users u ON u.id = er.user_a_id OR u.id = er.user_b_id
+               WHERE u.deleted_at IS NULL AND u.created_at >= CAST(:start AS timestamp) AND u.created_at < CAST(:end AS timestamp)) AS exchange,
+              (SELECT COUNT(DISTINCT CASE WHEN c.user_a_id = u.id THEN u.id ELSE u.id END)
+               FROM couples c JOIN users u ON u.id = c.user_a_id OR u.id = c.user_b_id
+               WHERE u.deleted_at IS NULL AND u.created_at >= CAST(:start AS timestamp) AND u.created_at < CAST(:end AS timestamp)) AS couple
             """;
 
         Query query = entityManager.createNativeQuery(sql);

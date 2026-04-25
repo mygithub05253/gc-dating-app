@@ -119,7 +119,7 @@ public class AdminDashboardService {
                 COALESCE(au.cnt, 0) AS active_users,
                 COALESCE(m.cnt, 0) AS matches,
                 COALESCE(di.cnt, 0) AS diaries
-            FROM generate_series(:start::date, :end::date, '1 day') AS d(dt)
+            FROM generate_series(CAST(:start AS date), CAST(:end AS date), '1 day') AS d(dt)
             LEFT JOIN (
                 SELECT created_at::date AS dt, COUNT(*) AS cnt
                 FROM users WHERE deleted_at IS NULL
@@ -178,10 +178,10 @@ public class AdminDashboardService {
 
         // 이상형 키워드 TOP 10
         String topKeywordSql = """
-            SELECT k.display_name, COUNT(*) AS cnt
-            FROM user_ideal_types uit
+            SELECT k.label, COUNT(*) AS cnt
+            FROM user_ideal_keywords uit
             JOIN keywords k ON k.id = uit.keyword_id
-            GROUP BY k.display_name
+            GROUP BY k.label
             ORDER BY cnt DESC
             LIMIT 10
             """;
