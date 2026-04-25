@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface AdminAccountRepository extends JpaRepository<AdminAccount, Long> {
@@ -42,4 +43,8 @@ public interface AdminAccountRepository extends JpaRepository<AdminAccount, Long
                                     @Param("role") AdminAccount.AdminRole role,
                                     @Param("status") AdminAccount.AdminStatus status,
                                     Pageable pageable);
+
+    /** ACTIVE SUPER_ADMIN 목록 — Phase 1B-3 에스컬레이션 알림 자동 할당 대상. */
+    List<AdminAccount> findAllByRoleAndStatus(AdminAccount.AdminRole role,
+                                              AdminAccount.AdminStatus status);
 }
