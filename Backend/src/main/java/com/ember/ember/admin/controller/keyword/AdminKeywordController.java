@@ -1,10 +1,12 @@
 package com.ember.ember.admin.controller.keyword;
 
 import com.ember.ember.admin.annotation.AdminOnly;
+import com.ember.ember.admin.annotation.SuperAdminOnly;
 import com.ember.ember.admin.dto.keyword.AdminKeywordDto.CreateRequest;
 import com.ember.ember.admin.dto.keyword.AdminKeywordDto.KeywordResponse;
 import com.ember.ember.admin.dto.keyword.AdminKeywordDto.UpdateRequest;
 import com.ember.ember.admin.dto.keyword.AdminKeywordDto.WeightUpdateRequest;
+import com.ember.ember.admin.dto.keyword.VectorRebuildResponse;
 import com.ember.ember.admin.service.keyword.AdminKeywordService;
 import com.ember.ember.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -75,5 +77,13 @@ public class AdminKeywordController {
             @Valid @RequestBody WeightUpdateRequest request) {
         adminKeywordService.updateWeights(request);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @PostMapping("/rebuild-vectors")
+    @SuperAdminOnly
+    @Operation(summary = "사용자 벡터 재계산 트리거 (SUPER_ADMIN)",
+            description = "전체 사용자 벡터 재계산을 트리거한다. 이미 진행 중이면 409 에러.")
+    public ResponseEntity<ApiResponse<VectorRebuildResponse>> rebuildVectors() {
+        return ResponseEntity.ok(ApiResponse.success(adminKeywordService.rebuildVectors()));
     }
 }

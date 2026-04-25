@@ -88,6 +88,29 @@ public class AdminNoticeService {
         return NoticeResponse.from(notice);
     }
 
+    // ── §11 상태 변경 ─────────────────────────────────────────
+
+    @Transactional
+    @AdminAction(action = "NOTICE_STATUS_CHANGE", targetType = "NOTICE", targetIdParam = "noticeId")
+    public com.ember.ember.admin.dto.notice.NoticeStatusResponse changeStatus(
+            Long noticeId, Notice.NoticeStatus newStatus) {
+        Notice notice = load(noticeId);
+        notice.changeStatus(newStatus);
+
+        // 약관 변경 공지를 숨길 때 경고 메시지 포함
+        String warningMessage = null;
+        if (newStatus == Notice.NoticeStatus.DRAFT
+                && notice.getCategory() == Notice.NoticeCategory.TERMS) {
+            warningMessage = "약관 변경 공지가 숨겨졌습니다. 사용자에게 약관 변경 사항이 노출되지 않을 수 있습니다.";
+        }
+
+        log.info("[NOTICE_STATUS_CHANGE] noticeId={} newStatus={}", noticeId, newStatus);
+        return new com.ember.ember.admin.dto.notice.NoticeStatusResponse(
+                notice.getId(), notice.getStatus(), notice.getCategory(),
+                warningMessage, java.time.LocalDateTime.now()
+        );
+    }
+
     // ── §11 삭제 (소프트) ────────────────────────────────────
 
     @Transactional

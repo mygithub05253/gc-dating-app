@@ -5,6 +5,7 @@ import com.ember.ember.admin.domain.terms.Terms;
 import com.ember.ember.admin.dto.terms.AdminTermsDto.CreateRequest;
 import com.ember.ember.admin.dto.terms.AdminTermsDto.TermsResponse;
 import com.ember.ember.admin.dto.terms.AdminTermsDto.UpdateRequest;
+import com.ember.ember.admin.dto.terms.TermsHistoryResponse;
 import com.ember.ember.admin.service.terms.AdminTermsService;
 import com.ember.ember.global.response.ApiResponse;
 import com.ember.ember.global.security.CustomUserDetails;
@@ -75,5 +76,16 @@ public class AdminTermsController {
     public ResponseEntity<ApiResponse<Void>> archive(@PathVariable Long termsId) {
         adminTermsService.archive(termsId);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    @GetMapping("/history")
+    @Operation(summary = "약관 변경 이력 조회", description = "admin_audit_logs에서 약관 관련 변경 이력을 조회한다.")
+    public ResponseEntity<ApiResponse<Page<TermsHistoryResponse>>> history(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) Long termId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminTermsService.getHistory(type, termId, page, size)));
     }
 }

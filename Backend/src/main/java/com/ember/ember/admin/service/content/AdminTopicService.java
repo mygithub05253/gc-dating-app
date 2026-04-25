@@ -6,6 +6,7 @@ import com.ember.ember.global.exception.BusinessException;
 import com.ember.ember.global.response.ErrorCode;
 import com.ember.ember.topic.domain.WeeklyTopic;
 import com.ember.ember.topic.repository.WeeklyTopicRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 관리자 주제 관리 서비스 — 관리자 API v2.1 §6.4 / §6.5.
@@ -26,6 +28,7 @@ import java.time.LocalDate;
 public class AdminTopicService {
 
     private final WeeklyTopicRepository weeklyTopicRepository;
+    private final EntityManager em;
 
     // ── §6.4 목록/생성/수정/삭제 ─────────────────────────────────────────
     public Page<AdminTopicResponse> list(String category, Boolean isActive, Pageable pageable) {
@@ -76,6 +79,39 @@ public class AdminTopicService {
         }
         target.rescheduleTo(monday);
         log.info("[TOPIC_SCHEDULE] topicId={} → {} reason={}", topicId, monday, overrideReason);
+    }
+
+    // ── 주간 주제 스케줄 조회 ─────────────────────────────────────────────
+    /**
+     * 현재 주부터 N주 앞까지 배정된 주간 주제 스케줄을 반환한다.
+     */
+    public List<AdminTopicScheduleResponse> getSchedule(int weeks) {
+        int safeWeeks = Math.max(1, Math.min(weeks, 52));
+        LocalDate today = LocalDate.now();
+        LocalDate startMonday = toMonday(today);
+        LocalDate endMonday = startMonday.plusWeeks(safeWeeks);
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery("""
+                SELECT id, topic, category, week_start_date, usage_count, is_active
+                FROM weekly_topics
+                WHERE week_start_date >= :start AND week_start_date < :end
+                ORDER BY week_start_date ASC
+                """)
+                .setParameter("start", startMonday)
+                .setParameter("end", endMonday)
+                .getResultList();
+
+        return rows.stream()
+                .map(r -> new AdminTopicScheduleResponse(
+                        ((Number) r[0]).longValue(),
+                        (String) r[1],
+                        (String) r[2],
+                        r[3] instanceof LocalDate ld ? ld : ((java.sql.Date) r[3]).toLocalDate(),
+                        ((Number) r[4]).intValue(),
+                        (Boolean) r[5]
+                ))
+                .toList();
     }
 
     private WeeklyTopic load(Long topicId) {

@@ -104,6 +104,14 @@ public class Notice extends BaseEntity {
         this.publishedAt = publishedAt;
     }
 
+    /** 상태 변경 (PUBLISHED/DRAFT) */
+    public void changeStatus(NoticeStatus newStatus) {
+        this.status = newStatus;
+        if (newStatus == NoticeStatus.PUBLISHED && this.publishedAt == null) {
+            this.publishedAt = LocalDateTime.now();
+        }
+    }
+
     /** 소프트 삭제 */
     public void softDelete() {
         this.deletedAt = LocalDateTime.now();

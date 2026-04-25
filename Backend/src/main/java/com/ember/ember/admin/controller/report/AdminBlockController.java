@@ -3,6 +3,7 @@ package com.ember.ember.admin.controller.report;
 import com.ember.ember.admin.annotation.AdminOnly;
 import com.ember.ember.admin.dto.report.AdminBlockListItemResponse;
 import com.ember.ember.admin.dto.report.AdminBlockStatsResponse;
+import com.ember.ember.admin.dto.report.ConcentratedTargetResponse;
 import com.ember.ember.admin.service.report.AdminBlockService;
 import com.ember.ember.global.response.ApiResponse;
 import com.ember.ember.report.domain.Block;
@@ -45,5 +46,17 @@ public class AdminBlockController {
     public ResponseEntity<ApiResponse<AdminBlockStatsResponse>> stats(
             @RequestParam(defaultValue = "10") int topN) {
         return ResponseEntity.ok(ApiResponse.success(adminBlockService.stats(topN)));
+    }
+
+    /** 차단 집중 대상 조회 — 기간 내 minBlockCount 이상 차단받은 사용자 목록. */
+    @GetMapping("/concentrated-targets")
+    @Operation(summary = "차단 집중 대상 조회",
+            description = "특정 기간(7d/30d) 내 N회 이상 차단받은 사용자 목록.")
+    public ResponseEntity<ApiResponse<Page<ConcentratedTargetResponse>>> concentratedTargets(
+            @RequestParam(defaultValue = "7d") String period,
+            @RequestParam(defaultValue = "3") int minBlockCount,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.success(
+                adminBlockService.concentratedTargets(period, minBlockCount, pageable)));
     }
 }

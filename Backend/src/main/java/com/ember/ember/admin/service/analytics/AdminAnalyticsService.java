@@ -2,6 +2,10 @@ package com.ember.ember.admin.service.analytics;
 
 import com.ember.ember.admin.dto.analytics.AiPerformanceResponse;
 import com.ember.ember.admin.dto.analytics.AssociationRulesResponse;
+import com.ember.ember.admin.dto.analytics.ChurnAtRiskResponse;
+import com.ember.ember.admin.dto.analytics.ChurnFunnelResponse;
+import com.ember.ember.admin.dto.analytics.ChurnReasonsResponse;
+import com.ember.ember.admin.dto.analytics.ChurnTimelineResponse;
 import com.ember.ember.admin.dto.analytics.CohortRetentionResponse;
 import com.ember.ember.admin.dto.analytics.DiaryEmotionTrendResponse;
 import com.ember.ember.admin.dto.analytics.DiaryLengthQualityResponse;
@@ -9,10 +13,13 @@ import com.ember.ember.admin.dto.analytics.DiaryTimeHeatmapResponse;
 import com.ember.ember.admin.dto.analytics.DiaryTopicParticipationResponse;
 import com.ember.ember.admin.dto.analytics.ExchangeResponseRateResponse;
 import com.ember.ember.admin.dto.analytics.ExchangeTurnFunnelResponse;
+import com.ember.ember.admin.dto.analytics.InactiveUsersSummaryResponse;
 import com.ember.ember.admin.dto.analytics.JourneyDurationResponse;
 import com.ember.ember.admin.dto.analytics.KeywordTopResponse;
 import com.ember.ember.admin.dto.analytics.MatchingDiversityResponse;
 import com.ember.ember.admin.dto.analytics.MatchingFunnelResponse;
+import com.ember.ember.admin.dto.analytics.WithdrawalReasonResponse;
+import com.ember.ember.admin.dto.analytics.WithdrawalStatsResponse;
 import com.ember.ember.admin.dto.analytics.MatchingFunnelResponse.DailyFunnelPoint;
 import com.ember.ember.admin.dto.analytics.MatchingFunnelResponse.Meta;
 import com.ember.ember.admin.dto.analytics.MatchingFunnelResponse.Period;
@@ -34,6 +41,8 @@ import com.ember.ember.admin.repository.analytics.AnalyticsSegmentRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsSegmentationRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsSurvivalRepository;
 import com.ember.ember.admin.repository.analytics.AnalyticsUserFunnelRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -130,6 +139,7 @@ public class AdminAnalyticsService {
     private final AnalyticsSegmentationRepository segmentationRepository;
     private final AnalyticsAssociationRepository associationRepository;
     private final AnalyticsCohortRepository cohortRepository;
+    private final EntityManager entityManager;
 
     // =========================================================================
     // §18.1 매칭 퍼널 (B-1.1)
@@ -1149,6 +1159,444 @@ public class AdminAnalyticsService {
                 avgList,
                 new CohortRetentionResponse.Meta(
                         "cohort-retention-weekly", degraded, DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // §18 이탈 타임라인 (3-H.1)
+    // =========================================================================
+
+    /**
+     * 이탈 타임라인 — last_login_at 간격이 30일 초과인 사용자를 이탈로 간주.
+     * 일별/주별 그룹화.
+     */
+    @SuppressWarnings("unchecked")
+    public ChurnTimelineResponse getChurnTimeline(String period, String granularity) {
+        int days = parsePeriodDays(period, 90);
+        String gran = (granularity == null || granularity.isBlank()) ? "daily" : granularity.toLowerCase(Locale.ROOT);
+        LocalDate end = LocalDate.now();
+        LocalDate start = end.minusDays(days);
+
+        String dateBucket = "weekly".equals(gran)
+            ? "DATE_TRUNC('week', u.last_login_at AT TIME ZONE 'Asia/Seoul')::date"
+            : "(u.last_login_at AT TIME ZONE 'Asia/Seoul')::date";
+
+        String sql = """
+            WITH churned AS (
+              SELECT u.id, u.last_login_at,
+                     %s AS churn_date
+              FROM users u
+              WHERE u.deleted_at IS NULL
+                AND u.last_login_at IS NOT NULL
+                AND u.last_login_at < NOW() - INTERVAL '30 days'
+                AND u.last_login_at >= :start::timestamp
+                AND u.last_login_at < :end::timestamp
+            ),
+            total_active AS (
+              SELECT COUNT(*) AS cnt FROM users
+              WHERE deleted_at IS NULL AND last_login_at IS NOT NULL
+                AND last_login_at >= :start::timestamp AND last_login_at < :end::timestamp
+            )
+            SELECT c.churn_date, COUNT(*) AS churn_count,
+                   CASE WHEN ta.cnt > 0 THEN COUNT(*)::double precision / ta.cnt ELSE NULL END AS churn_rate
+            FROM churned c, total_active ta
+            GROUP BY c.churn_date, ta.cnt
+            ORDER BY c.churn_date
+            """.formatted(dateBucket);
+
+        Query query = entityManager.createNativeQuery(sql);
+        query.setParameter("start", start.toString());
+        query.setParameter("end", end.plusDays(1).toString());
+
+        List<Object[]> rows = query.getResultList();
+        List<ChurnTimelineResponse.TimelinePoint> timeline = new ArrayList<>(rows.size());
+        long totalChurned = 0;
+        double rateSum = 0.0;
+        int rateCount = 0;
+
+        for (Object[] row : rows) {
+            LocalDate date = toLocalDate(row[0]);
+            long count = toLong(row[1]);
+            Double rate = toDouble(row[2]);
+            timeline.add(new ChurnTimelineResponse.TimelinePoint(date, count, rate));
+            totalChurned += count;
+            if (rate != null) { rateSum += rate; rateCount++; }
+        }
+
+        Double avgRate = rateCount > 0 ? rateSum / rateCount : null;
+
+        return new ChurnTimelineResponse(
+            new ChurnTimelineResponse.Period(start, end, TZ),
+            gran, timeline, totalChurned, avgRate,
+            new ChurnTimelineResponse.Meta(false, DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // §18 이탈 사유 분석 (3-H.2)
+    // =========================================================================
+
+    /**
+     * 이탈 사유 추정 — 마지막 활동 패턴 기반.
+     * 일기 작성 없음, 매칭 실패, 교환일기 미완료, 채팅 이탈 등.
+     */
+    @SuppressWarnings("unchecked")
+    public ChurnReasonsResponse getChurnReasons() {
+        String sql = """
+            WITH churned_users AS (
+              SELECT u.id
+              FROM users u
+              WHERE u.deleted_at IS NULL
+                AND u.last_login_at IS NOT NULL
+                AND u.last_login_at < NOW() - INTERVAL '30 days'
+            ),
+            user_activity AS (
+              SELECT cu.id AS user_id,
+                (SELECT COUNT(*) FROM diaries d WHERE d.author_id = cu.id) AS diary_count,
+                (SELECT COUNT(*) FROM matchings m WHERE (m.requester_id = cu.id OR m.responder_id = cu.id) AND m.status = 'MATCHED') AS match_count,
+                (SELECT COUNT(*) FROM exchange_rooms er WHERE (er.user1_id = cu.id OR er.user2_id = cu.id)) AS exchange_count,
+                (SELECT COUNT(*) FROM chat_rooms cr WHERE (cr.user1_id = cu.id OR cr.user2_id = cu.id)) AS chat_count
+              FROM churned_users cu
+            )
+            SELECT
+              CASE
+                WHEN diary_count = 0 THEN 'NO_DIARY_WRITTEN'
+                WHEN match_count = 0 AND diary_count > 0 THEN 'NO_MATCH_FOUND'
+                WHEN exchange_count = 0 AND match_count > 0 THEN 'MATCH_BUT_NO_EXCHANGE'
+                WHEN chat_count = 0 AND exchange_count > 0 THEN 'EXCHANGE_BUT_NO_CHAT'
+                ELSE 'NATURAL_CHURN'
+              END AS reason,
+              COUNT(*) AS cnt
+            FROM user_activity
+            GROUP BY reason
+            ORDER BY cnt DESC
+            """;
+
+        Query query = entityManager.createNativeQuery(sql);
+        List<Object[]> rows = query.getResultList();
+
+        long total = rows.stream().mapToLong(r -> toLong(r[1])).sum();
+        List<ChurnReasonsResponse.ReasonItem> reasons = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            String reason = (String) row[0];
+            long count = toLong(row[1]);
+            Double pct = safeDivide(count, total);
+            reasons.add(new ChurnReasonsResponse.ReasonItem(reason, count, pct));
+        }
+
+        return new ChurnReasonsResponse(reasons, total,
+            new ChurnReasonsResponse.Meta(false, DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // §18 이탈 위험 사용자 수 (3-H.3)
+    // =========================================================================
+
+    /**
+     * 이탈 위험 사용자 — HIGH=14일+, MEDIUM=7~14일, LOW=3~7일.
+     */
+    @SuppressWarnings("unchecked")
+    public ChurnAtRiskResponse getChurnAtRiskCount() {
+        String sql = """
+            SELECT
+              CASE
+                WHEN last_login_at < NOW() - INTERVAL '14 days' THEN 'HIGH'
+                WHEN last_login_at < NOW() - INTERVAL '7 days' THEN 'MEDIUM'
+                WHEN last_login_at < NOW() - INTERVAL '3 days' THEN 'LOW'
+              END AS risk_level,
+              COUNT(*) AS cnt
+            FROM users
+            WHERE deleted_at IS NULL
+              AND last_login_at IS NOT NULL
+              AND last_login_at < NOW() - INTERVAL '3 days'
+            GROUP BY risk_level
+            ORDER BY
+              CASE risk_level WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 END
+            """;
+
+        Query query = entityManager.createNativeQuery(sql);
+        List<Object[]> rows = query.getResultList();
+
+        long total = 0;
+        List<ChurnAtRiskResponse.RiskLevelCount> levels = new ArrayList<>(3);
+        for (Object[] row : rows) {
+            String level = (String) row[0];
+            long count = toLong(row[1]);
+            levels.add(new ChurnAtRiskResponse.RiskLevelCount(level, count));
+            total += count;
+        }
+
+        return new ChurnAtRiskResponse(total, levels,
+            new ChurnAtRiskResponse.Meta(false, DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // §18 비활성 사용자 요약 (3-H.4)
+    // =========================================================================
+
+    /**
+     * 비활성 사용자 요약 — last_login_at 기반 비활성 기간 구간별.
+     */
+    @SuppressWarnings("unchecked")
+    public InactiveUsersSummaryResponse getInactiveUsersSummary() {
+        String sql = """
+            WITH inactive AS (
+              SELECT id,
+                EXTRACT(DAY FROM NOW() - last_login_at)::int AS inactive_days
+              FROM users
+              WHERE deleted_at IS NULL
+                AND last_login_at IS NOT NULL
+                AND last_login_at < NOW() - INTERVAL '3 days'
+            ),
+            reactivated AS (
+              SELECT COUNT(*) AS cnt FROM users
+              WHERE deleted_at IS NULL
+                AND last_login_at IS NOT NULL
+                AND last_login_at >= NOW() - INTERVAL '7 days'
+                AND created_at < NOW() - INTERVAL '30 days'
+            )
+            SELECT
+              (SELECT COUNT(*) FROM inactive) AS total_inactive,
+              COALESCE(SUM(CASE WHEN inactive_days BETWEEN 3 AND 6 THEN 1 ELSE 0 END), 0) AS d3_6,
+              COALESCE(SUM(CASE WHEN inactive_days BETWEEN 7 AND 14 THEN 1 ELSE 0 END), 0) AS d7_14,
+              COALESCE(SUM(CASE WHEN inactive_days BETWEEN 15 AND 30 THEN 1 ELSE 0 END), 0) AS d15_30,
+              COALESCE(SUM(CASE WHEN inactive_days BETWEEN 31 AND 60 THEN 1 ELSE 0 END), 0) AS d31_60,
+              COALESCE(SUM(CASE WHEN inactive_days > 60 THEN 1 ELSE 0 END), 0) AS d60_plus,
+              (SELECT cnt FROM reactivated) AS reactivated_count,
+              (SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND last_login_at IS NOT NULL AND created_at < NOW() - INTERVAL '30 days') AS base_count
+            FROM inactive
+            """;
+
+        Query query = entityManager.createNativeQuery(sql);
+        Object[] row = (Object[]) query.getSingleResult();
+
+        long totalInactive = toLong(row[0]);
+        List<InactiveUsersSummaryResponse.InactiveBucket> buckets = List.of(
+            new InactiveUsersSummaryResponse.InactiveBucket("3-6일", toLong(row[1])),
+            new InactiveUsersSummaryResponse.InactiveBucket("7-14일", toLong(row[2])),
+            new InactiveUsersSummaryResponse.InactiveBucket("15-30일", toLong(row[3])),
+            new InactiveUsersSummaryResponse.InactiveBucket("31-60일", toLong(row[4])),
+            new InactiveUsersSummaryResponse.InactiveBucket("60일 이상", toLong(row[5]))
+        );
+
+        long reactivated = toLong(row[6]);
+        long baseCount = toLong(row[7]);
+        Double reactivationRate = safeDivide(reactivated, baseCount);
+
+        return new InactiveUsersSummaryResponse(totalInactive, buckets, reactivationRate,
+            new InactiveUsersSummaryResponse.Meta(false, DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // §18 탈퇴 통계 (3-H.5)
+    // =========================================================================
+
+    /**
+     * 탈퇴 통계 — user_withdrawal_log 기반.
+     */
+    @SuppressWarnings("unchecked")
+    public WithdrawalStatsResponse getWithdrawalStats(LocalDate startDate, LocalDate endDate) {
+        LocalDate end = endDate != null ? endDate : LocalDate.now();
+        LocalDate start = startDate != null ? startDate : end.minusDays(29);
+        LocalDate endExclusive = end.plusDays(1);
+
+        // 전체 탈퇴 수
+        String totalSql = """
+            SELECT COUNT(*) FROM user_withdrawal_log
+            WHERE withdrawn_at >= :start::timestamp AND withdrawn_at < :end::timestamp
+            """;
+        Query totalQuery = entityManager.createNativeQuery(totalSql);
+        totalQuery.setParameter("start", start.toString());
+        totalQuery.setParameter("end", endExclusive.toString());
+        long totalWithdrawals = toLong(totalQuery.getSingleResult());
+
+        // 삭제 대기 수 (permanent_delete_at 이 아직 미래)
+        String pendingSql = """
+            SELECT COUNT(*) FROM user_withdrawal_log
+            WHERE permanent_delete_at > NOW()
+            """;
+        long pendingDeletion = toLong(entityManager.createNativeQuery(pendingSql).getSingleResult());
+
+        // 사유별 집계
+        String reasonSql = """
+            SELECT COALESCE(reason, 'UNKNOWN') AS reason, COUNT(*) AS cnt
+            FROM user_withdrawal_log
+            WHERE withdrawn_at >= :start::timestamp AND withdrawn_at < :end::timestamp
+            GROUP BY reason ORDER BY cnt DESC
+            """;
+        Query reasonQuery = entityManager.createNativeQuery(reasonSql);
+        reasonQuery.setParameter("start", start.toString());
+        reasonQuery.setParameter("end", endExclusive.toString());
+        List<Object[]> reasonRows = reasonQuery.getResultList();
+
+        List<WithdrawalStatsResponse.ReasonCount> byReason = new ArrayList<>(reasonRows.size());
+        for (Object[] r : reasonRows) {
+            String reason = (String) r[0];
+            long count = toLong(r[1]);
+            byReason.add(new WithdrawalStatsResponse.ReasonCount(
+                reason, count, safeDivide(count, totalWithdrawals)));
+        }
+
+        // 일별 추이
+        String trendSql = """
+            SELECT (withdrawn_at AT TIME ZONE 'Asia/Seoul')::date AS d, COUNT(*)
+            FROM user_withdrawal_log
+            WHERE withdrawn_at >= :start::timestamp AND withdrawn_at < :end::timestamp
+            GROUP BY d ORDER BY d
+            """;
+        Query trendQuery = entityManager.createNativeQuery(trendSql);
+        trendQuery.setParameter("start", start.toString());
+        trendQuery.setParameter("end", endExclusive.toString());
+        List<Object[]> trendRows = trendQuery.getResultList();
+
+        List<WithdrawalStatsResponse.DailyTrend> dailyTrend = new ArrayList<>(trendRows.size());
+        for (Object[] r : trendRows) {
+            dailyTrend.add(new WithdrawalStatsResponse.DailyTrend(toLocalDate(r[0]), toLong(r[1])));
+        }
+
+        return new WithdrawalStatsResponse(
+            new WithdrawalStatsResponse.Period(start, end, TZ),
+            totalWithdrawals, pendingDeletion, byReason, dailyTrend,
+            new WithdrawalStatsResponse.Meta(false, DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // §18 탈퇴 사유 상세 (3-H.6)
+    // =========================================================================
+
+    /**
+     * 탈퇴 사유 상세 목록 (페이징).
+     */
+    @SuppressWarnings("unchecked")
+    public WithdrawalReasonResponse getWithdrawalReasons(String reason, int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+
+        String whereClause = (reason != null && !reason.isBlank())
+            ? "WHERE reason = :reason" : "";
+
+        String countSql = "SELECT COUNT(*) FROM user_withdrawal_log " + whereClause;
+        Query countQuery = entityManager.createNativeQuery(countSql);
+        if (!whereClause.isEmpty()) countQuery.setParameter("reason", reason);
+        long totalElements = toLong(countQuery.getSingleResult());
+
+        String dataSql = """
+            SELECT id, user_id, COALESCE(reason, 'UNKNOWN'), detail, withdrawn_at, permanent_delete_at
+            FROM user_withdrawal_log %s
+            ORDER BY withdrawn_at DESC
+            LIMIT :limit OFFSET :offset
+            """.formatted(whereClause);
+        Query dataQuery = entityManager.createNativeQuery(dataSql);
+        if (!whereClause.isEmpty()) dataQuery.setParameter("reason", reason);
+        dataQuery.setParameter("limit", safeSize);
+        dataQuery.setParameter("offset", safePage * safeSize);
+
+        List<Object[]> rows = dataQuery.getResultList();
+        List<WithdrawalReasonResponse.WithdrawalItem> items = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            items.add(new WithdrawalReasonResponse.WithdrawalItem(
+                toLong(row[0]),
+                toLong(row[1]),
+                (String) row[2],
+                row[3] != null ? row[3].toString() : null,
+                toLocalDateTime(row[4]),
+                toLocalDateTime(row[5])
+            ));
+        }
+
+        int totalPages = (int) Math.ceil((double) totalElements / safeSize);
+        return new WithdrawalReasonResponse(items, safePage, safeSize, totalElements, totalPages,
+            new WithdrawalReasonResponse.Meta(false, DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // §18 사용자 퍼널 분석 - 이탈 분석용 (3-H.7)
+    // =========================================================================
+
+    /**
+     * 사용자 퍼널 분석 (이탈 분석용 6단 퍼널).
+     * signup -> profile -> first_diary -> first_match -> exchange -> couple.
+     */
+    @SuppressWarnings("unchecked")
+    public ChurnFunnelResponse getUserChurnFunnel(String period, String cohort) {
+        int days = parsePeriodDays(period, 30);
+        String cohortMode = (cohort == null || cohort.isBlank()) ? "signup_date" : cohort;
+        LocalDate end = LocalDate.now();
+        LocalDate start = end.minusDays(days);
+        LocalDate endExclusive = end.plusDays(1);
+
+        String sql = """
+            SELECT
+              (SELECT COUNT(*) FROM users
+               WHERE deleted_at IS NULL AND created_at >= :start::timestamp AND created_at < :end::timestamp) AS signups,
+              (SELECT COUNT(DISTINCT u.id) FROM users u
+               JOIN user_profiles up ON up.user_id = u.id
+               WHERE u.deleted_at IS NULL AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS profiles,
+              (SELECT COUNT(DISTINCT d.author_id) FROM diaries d
+               JOIN users u ON u.id = d.author_id
+               WHERE u.deleted_at IS NULL AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS first_diary,
+              (SELECT COUNT(DISTINCT CASE WHEN m.requester_id = u.id THEN u.id ELSE u.id END)
+               FROM matchings m JOIN users u ON u.id = m.requester_id OR u.id = m.responder_id
+               WHERE m.status = 'MATCHED' AND u.deleted_at IS NULL
+                 AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS first_match,
+              (SELECT COUNT(DISTINCT CASE WHEN er.user1_id = u.id THEN u.id ELSE u.id END)
+               FROM exchange_rooms er JOIN users u ON u.id = er.user1_id OR u.id = er.user2_id
+               WHERE u.deleted_at IS NULL AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS exchange,
+              (SELECT COUNT(DISTINCT CASE WHEN c.user1_id = u.id THEN u.id ELSE u.id END)
+               FROM couples c JOIN users u ON u.id = c.user1_id OR u.id = c.user2_id
+               WHERE u.deleted_at IS NULL AND u.created_at >= :start::timestamp AND u.created_at < :end::timestamp) AS couple
+            """;
+
+        Query query = entityManager.createNativeQuery(sql);
+        query.setParameter("start", start.toString());
+        query.setParameter("end", endExclusive.toString());
+
+        Object[] row = (Object[]) query.getSingleResult();
+        long signups = toLong(row[0]);
+        long profiles = toLong(row[1]);
+        long firstDiary = toLong(row[2]);
+        long firstMatch = toLong(row[3]);
+        long exchange = toLong(row[4]);
+        long couple = toLong(row[5]);
+
+        List<ChurnFunnelResponse.FunnelStage> stages = List.of(
+            new ChurnFunnelResponse.FunnelStage("SIGNUP", signups, 1.0, null),
+            new ChurnFunnelResponse.FunnelStage("PROFILE", profiles,
+                safeDivide(profiles, signups), dropoffRate(signups, profiles)),
+            new ChurnFunnelResponse.FunnelStage("FIRST_DIARY", firstDiary,
+                safeDivide(firstDiary, signups), dropoffRate(profiles, firstDiary)),
+            new ChurnFunnelResponse.FunnelStage("FIRST_MATCH", firstMatch,
+                safeDivide(firstMatch, signups), dropoffRate(firstDiary, firstMatch)),
+            new ChurnFunnelResponse.FunnelStage("EXCHANGE", exchange,
+                safeDivide(exchange, signups), dropoffRate(firstMatch, exchange)),
+            new ChurnFunnelResponse.FunnelStage("COUPLE", couple,
+                safeDivide(couple, signups), dropoffRate(exchange, couple))
+        );
+
+        return new ChurnFunnelResponse(
+            new ChurnFunnelResponse.Period(start, end, TZ),
+            cohortMode, stages, signups, safeDivide(couple, signups),
+            new ChurnFunnelResponse.Meta(false, DATA_SOURCE_V2));
+    }
+
+    // =========================================================================
+    // period 파싱 유틸
+    // =========================================================================
+
+    private static int parsePeriodDays(String period, int defaultDays) {
+        if (period == null || period.isBlank()) return defaultDays;
+        return switch (period.toLowerCase(Locale.ROOT)) {
+            case "7d" -> 7;
+            case "30d" -> 30;
+            case "90d" -> 90;
+            case "180d" -> 180;
+            default -> defaultDays;
+        };
+    }
+
+    private static LocalDateTime toLocalDateTime(Object o) {
+        if (o == null) return null;
+        if (o instanceof LocalDateTime ldt) return ldt;
+        if (o instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
+        return LocalDateTime.parse(o.toString());
     }
 
     // =========================================================================
