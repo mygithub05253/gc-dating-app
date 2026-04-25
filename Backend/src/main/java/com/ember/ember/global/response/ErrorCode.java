@@ -162,7 +162,13 @@ public enum ErrorCode {
 
     // §5.10~5.11 외부 연락처 감지
     ADM_CONTACT_DETECTION_NOT_FOUND("ADM022", HttpStatus.NOT_FOUND, "존재하지 않는 외부 연락처 감지 항목입니다."),
-    ADM_CONTACT_DETECTION_ALREADY_PROCESSED("ADM023", HttpStatus.BAD_REQUEST, "이미 처리된 감지 항목입니다.");
+    ADM_CONTACT_DETECTION_ALREADY_PROCESSED("ADM023", HttpStatus.BAD_REQUEST, "이미 처리된 감지 항목입니다."),
+
+    // §11.2 관리자 알림 센터
+    ADM_NOTIFICATION_NOT_FOUND("ADM024", HttpStatus.NOT_FOUND, "존재하지 않는 관리자 알림입니다."),
+    ADM_NOTIFICATION_ALREADY_RESOLVED("ADM025", HttpStatus.CONFLICT, "이미 처리 완료된 알림입니다."),
+    ADM_NOTIFICATION_ASSIGNEE_INACTIVE("ADM026", HttpStatus.UNPROCESSABLE_ENTITY, "비활성 관리자에게는 알림을 할당할 수 없습니다."),
+    ADM_NOTIFICATION_INVALID_CHANNEL("ADM027", HttpStatus.BAD_REQUEST, "알림 채널 값이 올바르지 않습니다.");
 
     private final String code;
     private final HttpStatus status;

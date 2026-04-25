@@ -31,6 +31,7 @@ import {
   Ban,
   Phone,
   PieChart,
+  Inbox,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
@@ -53,6 +54,15 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { title: '대시보드', href: '/admin/dashboard', icon: LayoutDashboard },
+  {
+    title: '알림 센터',
+    href: '/admin/notifications',
+    icon: Inbox,
+    subItems: [
+      { title: '알림 인박스', href: '/admin/notifications' },
+      { title: '구독 설정', href: '/admin/notifications/subscriptions' },
+    ],
+  },
   {
     title: '회원 관리',
     href: '/admin/members',
