@@ -1250,7 +1250,7 @@ public class AdminAnalyticsService {
             ),
             user_activity AS (
               SELECT cu.id AS user_id,
-                (SELECT COUNT(*) FROM diaries d WHERE d.author_id = cu.id) AS diary_count,
+                (SELECT COUNT(*) FROM diaries d WHERE d.user_id = cu.id) AS diary_count,
                 (SELECT COUNT(*) FROM matchings m WHERE (m.from_user_id = cu.id OR m.to_user_id = cu.id) AND m.status = 'MATCHED') AS match_count,
                 (SELECT COUNT(*) FROM exchange_rooms er WHERE (er.user_a_id = cu.id OR er.user_b_id = cu.id)) AS exchange_count,
                 (SELECT COUNT(*) FROM chat_rooms cr WHERE (cr.user_a_id = cu.id OR cr.user_b_id = cu.id)) AS chat_count
@@ -1266,7 +1266,7 @@ public class AdminAnalyticsService {
               END AS reason,
               COUNT(*) AS cnt
             FROM user_activity
-            GROUP BY reason
+            GROUP BY 1
             ORDER BY cnt DESC
             """;
 
@@ -1307,9 +1307,13 @@ public class AdminAnalyticsService {
             WHERE deleted_at IS NULL
               AND last_login_at IS NOT NULL
               AND last_login_at < NOW() - INTERVAL '3 days'
-            GROUP BY risk_level
+            GROUP BY 1
             ORDER BY
-              CASE risk_level WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 END
+              CASE
+                WHEN last_login_at < NOW() - INTERVAL '14 days' THEN 1
+                WHEN last_login_at < NOW() - INTERVAL '7 days' THEN 2
+                ELSE 3
+              END
             """;
 
         Query query = entityManager.createNativeQuery(sql);
@@ -1530,8 +1534,8 @@ public class AdminAnalyticsService {
               (SELECT COUNT(DISTINCT u.id) FROM users u
                WHERE u.deleted_at IS NULL AND u.onboarding_step >= 1
                  AND u.created_at >= CAST(:start AS timestamp) AND u.created_at < CAST(:end AS timestamp)) AS profiles,
-              (SELECT COUNT(DISTINCT d.author_id) FROM diaries d
-               JOIN users u ON u.id = d.author_id
+              (SELECT COUNT(DISTINCT d.user_id) FROM diaries d
+               JOIN users u ON u.id = d.user_id
                WHERE u.deleted_at IS NULL AND u.created_at >= CAST(:start AS timestamp) AND u.created_at < CAST(:end AS timestamp)) AS first_diary,
               (SELECT COUNT(DISTINCT CASE WHEN m.from_user_id = u.id THEN u.id ELSE u.id END)
                FROM matchings m JOIN users u ON u.id = m.from_user_id OR u.id = m.to_user_id
