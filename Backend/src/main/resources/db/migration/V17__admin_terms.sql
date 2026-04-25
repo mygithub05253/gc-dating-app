@@ -1,5 +1,5 @@
 -- 약관 관리 (관리자 명세 v2.1 §10)
-CREATE TABLE IF NOT EXISTS terms (
+CREATE TABLE IF NOT EXISTS admin_terms (
     id              BIGSERIAL    PRIMARY KEY,
     type            VARCHAR(20)  NOT NULL,                  -- USER_TERMS / AI_TERMS
     title           VARCHAR(200) NOT NULL,
@@ -16,9 +16,9 @@ CREATE TABLE IF NOT EXISTS terms (
 );
 
 -- 동일 유형의 ACTIVE 약관은 최대 1개만 허용
-CREATE UNIQUE INDEX IF NOT EXISTS idx_terms_type_active
-    ON terms (type) WHERE status = 'ACTIVE';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_terms_type_active
+    ON admin_terms (type) WHERE status = 'ACTIVE';
 
 -- 유형 + 상태 필터 조회
-CREATE INDEX IF NOT EXISTS idx_terms_type_status
-    ON terms (type, status);
+CREATE INDEX IF NOT EXISTS idx_admin_terms_type_status
+    ON admin_terms (type, status);

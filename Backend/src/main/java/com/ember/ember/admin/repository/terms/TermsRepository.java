@@ -13,7 +13,7 @@ public interface TermsRepository extends JpaRepository<Terms, Long> {
 
     /** 관리자 약관 목록 — type/status 필터. */
     @Query("""
-            SELECT t FROM Terms t
+            SELECT t FROM AdminTerms t
             WHERE (:type IS NULL OR t.type = :type)
               AND (:status IS NULL OR t.status = :status)
             ORDER BY t.createdAt DESC

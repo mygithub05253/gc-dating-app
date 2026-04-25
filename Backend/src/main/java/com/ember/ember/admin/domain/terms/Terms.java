@@ -6,8 +6,8 @@ import lombok.*;
 
 import java.time.LocalDate;
 
-@Entity
-@Table(name = "terms")
+@Entity(name = "AdminTerms")
+@Table(name = "admin_terms")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Terms extends BaseEntity {
