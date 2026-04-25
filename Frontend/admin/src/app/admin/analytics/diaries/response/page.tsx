@@ -136,14 +136,14 @@ export default function DiaryResponsePage() {
           <div className="mb-6 grid gap-4 md:grid-cols-4">
             <KpiCard
               title="평균 응답 시간 (P50)"
-              value={`${(data.overallDelay.p50Hours ?? 0).toFixed(1)}시간`}
-              description={`P90 ${(data.overallDelay.p90Hours ?? 0).toFixed(1)}h · P99 ${(data.overallDelay.p99Hours ?? 0).toFixed(1)}h`}
+              value={`${(data.overallDelay?.p50Hours ?? 0).toFixed(1)}시간`}
+              description={`P90 ${(data.overallDelay?.p90Hours ?? 0).toFixed(1)}h · P99 ${(data.overallDelay?.p99Hours ?? 0).toFixed(1)}h`}
               icon={Clock}
             />
             <KpiCard
               title="첫 응답률"
               value={`${((data.firstResponseRate ?? 0) * 100).toFixed(1)}%`}
-              description={`${data.windowHours}시간 윈도우 기준`}
+              description={`${data.windowHours ?? 48}시간 윈도우 기준`}
               icon={Zap}
               valueClassName="text-emerald-500"
             />
@@ -156,7 +156,7 @@ export default function DiaryResponsePage() {
             />
             <KpiCard
               title="P99 응답 시간"
-              value={`${(data.overallDelay.p99Hours ?? 0).toFixed(1)}시간`}
+              value={`${(data.overallDelay?.p99Hours ?? 0).toFixed(1)}시간`}
               description="가장 늦은 1% 응답 기준"
               icon={Timer}
               valueClassName="text-primary"

@@ -64,7 +64,7 @@ export default function ExchangeGuidePage() {
     ? tutorials
     : tutorials.filter((t) => t.type === activeTab);
 
-  const totalSteps = tutorials.reduce((sum, t) => sum + t.steps.length, 0);
+  const totalSteps = tutorials.reduce((sum, t) => sum + (t.steps ?? []).length, 0);
   const avgSteps = tutorials.length > 0
     ? (totalSteps / tutorials.length).toFixed(1)
     : '0';
@@ -188,7 +188,7 @@ export default function ExchangeGuidePage() {
               <CardContent>
                 <div className="flex items-center justify-between">
                   <div className="flex gap-4 text-sm text-muted-foreground">
-                    <span>스텝 {tutorial.steps.length}개</span>
+                    <span>스텝 {(tutorial.steps ?? []).length}개</span>
                     <span>업데이트: {formatDateTime(tutorial.updatedAt)}</span>
                   </div>
                   <div className="flex gap-2">
@@ -221,7 +221,7 @@ export default function ExchangeGuidePage() {
                 {/* 스텝 리스트 */}
                 {expandedId === tutorial.id && (
                   <div className="mt-4 space-y-4 border-t pt-4">
-                    {tutorial.steps.map((step) => (
+                    {(tutorial.steps ?? []).map((step) => (
                       <div key={step.stepOrder} className="flex gap-4">
                         <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
                           {step.stepOrder}

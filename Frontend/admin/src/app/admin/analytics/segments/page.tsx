@@ -68,7 +68,7 @@ export default function SegmentAnalysisPage() {
     if (!data) return [];
     return (data.rows ?? []).map((r, idx) => ({
       label: describeRow(r),
-      value: r.value,
+      value: r.value ?? 0,
       share: ((r.share ?? 0) * 100),
       masked: r.masked,
       color: PALETTE[idx % PALETTE.length],
@@ -83,8 +83,8 @@ export default function SegmentAnalysisPage() {
       const age = r.ageGroup ?? '미상';
       if (!byAge.has(age)) byAge.set(age, { age, M: 0, F: 0 });
       const entry = byAge.get(age)!;
-      if (r.gender === 'M') entry.M += r.value;
-      else if (r.gender === 'F') entry.F += r.value;
+      if (r.gender === 'M') entry.M += r.value ?? 0;
+      else if (r.gender === 'F') entry.F += r.value ?? 0;
     });
     return Array.from(byAge.values()).sort((a, b) => a.age.localeCompare(b.age));
   }, [data]);
@@ -172,7 +172,7 @@ export default function SegmentAnalysisPage() {
               value={top1?.label ?? '—'}
               description={
                 top1
-                  ? `${top1.value.toLocaleString()} · ${top1.share.toFixed(1)}%`
+                  ? `${(top1.value ?? 0).toLocaleString()} · ${(top1.share ?? 0).toFixed(1)}%`
                   : '데이터 없음'
               }
               icon={Target}
@@ -180,17 +180,17 @@ export default function SegmentAnalysisPage() {
             />
             <KpiCard
               title="총 사용자"
-              value={data.total.toLocaleString()}
+              value={(data.total ?? 0).toLocaleString()}
               description="기간 내 합계"
               icon={Activity}
               valueClassName="text-emerald-600"
             />
             <KpiCard
               title="마스킹 세그먼트"
-              value={data.maskedCount.toLocaleString()}
+              value={(data.maskedCount ?? 0).toLocaleString()}
               description={`k-anonymity ≥ ${data.meta.kAnonymityMin ?? '?'}`}
               icon={Crown}
-              valueClassName={data.maskedCount > 0 ? 'text-amber-600' : 'text-muted-foreground'}
+              valueClassName={(data.maskedCount ?? 0) > 0 ? 'text-amber-600' : 'text-muted-foreground'}
             />
           </div>
 
@@ -334,7 +334,7 @@ export default function SegmentAnalysisPage() {
                           />
                           {row.label}
                         </span>
-                        <span className="text-right tabular-nums">{row.value.toLocaleString()}</span>
+                        <span className="text-right tabular-nums">{(row.value ?? 0).toLocaleString()}</span>
                         <span className={`text-right tabular-nums font-medium ${retentionColor(row.share)}`}>
                           {row.share.toFixed(1)}%
                         </span>

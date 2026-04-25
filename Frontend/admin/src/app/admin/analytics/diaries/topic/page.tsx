@@ -162,14 +162,14 @@ export default function DiaryTopicPage() {
             <KpiCard
               title="Top 1 카테고리"
               value={top1?.category ?? '—'}
-              description={top1 ? `${top1.diaryCount.toLocaleString()}건` : '데이터 없음'}
+              description={top1 ? `${(top1.diaryCount ?? 0).toLocaleString()}건` : '데이터 없음'}
               icon={Crown}
               valueClassName="text-[#f59e0b] text-2xl"
             />
             <KpiCard
               title="총 일기 수"
-              value={data.totalDiaries.toLocaleString()}
-              description={`참여 사용자 ${data.totalUsers.toLocaleString()}명`}
+              value={(data.totalDiaries ?? 0).toLocaleString()}
+              description={`참여 사용자 ${(data.totalUsers ?? 0).toLocaleString()}명`}
               icon={Grid}
             />
           </div>
@@ -326,10 +326,10 @@ export default function DiaryTopicPage() {
                             </Badge>
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono-data">
-                            {row.diaryCount.toLocaleString()}
+                            {(row.diaryCount ?? 0).toLocaleString()}
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono-data text-muted-foreground">
-                            {row.userCount.toLocaleString()}
+                            {(row.userCount ?? 0).toLocaleString()}
                           </td>
                           <td
                             className="px-4 py-2.5 text-right font-mono-data font-medium"

@@ -196,7 +196,7 @@ export default function TurnFunnelPage() {
                             </div>
                             <span className="text-sm font-semibold text-foreground">{label}</span>
                             <span className="mt-1 text-xl font-bold text-foreground">
-                              {stage.count.toLocaleString()}
+                              {(stage.count ?? 0).toLocaleString()}
                             </span>
                             <span className="mt-0.5 text-xs text-muted-foreground">
                               {((stage.rate ?? 0) * 100).toFixed(1)}%

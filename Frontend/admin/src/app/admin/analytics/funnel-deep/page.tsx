@@ -160,8 +160,8 @@ export default function FunnelDeepPage() {
             />
             <KpiCard
               title="코호트 / 이탈"
-              value={`${data.eventCount.toLocaleString()} / ${data.cohortSize.toLocaleString()}`}
-              description={`센서드 ${data.censoredCount.toLocaleString()}명 · ${data.meta.algorithm}`}
+              value={`${(data.eventCount ?? 0).toLocaleString()} / ${(data.cohortSize ?? 0).toLocaleString()}`}
+              description={`센서드 ${(data.censoredCount ?? 0).toLocaleString()}명 · ${data.meta?.algorithm ?? '-'}`}
               icon={Crown}
               valueClassName="text-amber-500"
             />

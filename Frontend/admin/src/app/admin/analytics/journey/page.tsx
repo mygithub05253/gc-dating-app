@@ -69,7 +69,7 @@ export default function JourneyAnalysisPage() {
       p50: s.p50Hours ?? 0,
       p90: s.p90Hours ?? 0,
       p99: s.p99Hours ?? 0,
-      sampleSize: s.sampleSize,
+      sampleSize: s.sampleSize ?? 0,
       color: STAGE_COLORS[idx % STAGE_COLORS.length],
     }));
   }, [data]);

@@ -151,7 +151,7 @@ export default function AiInsightsPage() {
             />
             <KpiCard
               title="라이프스타일 분석량"
-              value={data.lifestyleThroughput.toLocaleString()}
+              value={(data.lifestyleThroughput ?? 0).toLocaleString()}
               description="기간 내 라이프스타일 분석 건수"
               icon={Target}
               valueClassName="text-primary"
@@ -308,16 +308,16 @@ export default function AiInsightsPage() {
                             {row.model}
                           </TableCell>
                           <TableCell className="text-right font-mono-data tabular-nums">
-                            {row.total.toLocaleString()}
+                            {(row.total ?? 0).toLocaleString()}
                           </TableCell>
                           <TableCell className="text-right font-mono-data tabular-nums text-success">
-                            {row.succeeded.toLocaleString()}
+                            {(row.succeeded ?? 0).toLocaleString()}
                           </TableCell>
                           <TableCell className="text-right font-mono-data tabular-nums text-destructive">
-                            {row.failed.toLocaleString()}
+                            {(row.failed ?? 0).toLocaleString()}
                           </TableCell>
                           <TableCell className="text-right font-mono-data tabular-nums font-bold">
-                            {(row.successRate * 100).toFixed(2)}%
+                            {((row.successRate ?? 0) * 100).toFixed(2)}%
                           </TableCell>
                         </TableRow>
                       ))}

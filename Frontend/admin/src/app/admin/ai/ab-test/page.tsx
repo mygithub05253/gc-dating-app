@@ -55,10 +55,14 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AIABTestPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
-  const { data: tests = [], isLoading, refetch } = useQuery<ABTestResult[]>({
+  const { data: rawTests, isLoading, refetch } = useQuery<ABTestResult[]>({
     queryKey: ['ab-test-results'],
-    queryFn: () => aiApi.getABTestResults().then(r => r.data.data),
+    queryFn: () => aiApi.getABTestResults().then(r => {
+      const d = r.data.data;
+      return Array.isArray(d) ? d : [];
+    }),
   });
+  const tests: ABTestResult[] = Array.isArray(rawTests) ? rawTests : [];
 
   const handleRefresh = () => {
     refetch().then(() => toast.success('A/B 테스트 목록을 새로고침했습니다.'));
@@ -254,27 +258,27 @@ export default function AIABTestPage() {
                   {(test.groups ?? []).map((group, idx) => (
                     <div
                       key={idx}
-                      className={`p-3 rounded-lg border ${test.isSignificant && idx === 1 && group.matchRate > (test.groups?.[0]?.matchRate ?? 0) ? 'border-green-500 bg-green-50' : 'bg-muted/30'}`}
+                      className={`p-3 rounded-lg border ${test.isSignificant && idx === 1 && (group.matchRate ?? 0) > (test.groups?.[0]?.matchRate ?? 0) ? 'border-green-500 bg-green-50' : 'bg-muted/30'}`}
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-medium">Group {group.groupName} ({group.modelVersion})</span>
-                        {test.isSignificant && idx === 1 && group.matchRate > (test.groups?.[0]?.matchRate ?? 0) && (
+                        {test.isSignificant && idx === 1 && (group.matchRate ?? 0) > (test.groups?.[0]?.matchRate ?? 0) && (
                           <CheckCircle className="h-4 w-4 text-green-600" />
                         )}
                       </div>
                       <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
                         <div>
                           <span className="text-muted-foreground">참여자</span>
-                          <p className="font-medium">{group.userCount.toLocaleString()}</p>
+                          <p className="font-medium">{(group.userCount ?? 0).toLocaleString()}</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">매칭률</span>
-                          <p className="font-medium">{(group.matchRate * 100).toFixed(1)}%</p>
+                          <p className="font-medium">{((group.matchRate ?? 0) * 100).toFixed(1)}%</p>
                         </div>
                         <div>
                           <span className="text-muted-foreground">교환 완료율</span>
-                          <p className={`font-bold ${idx === 1 && group.exchangeCompletionRate > (test.groups?.[0]?.exchangeCompletionRate ?? 0) ? 'text-green-600' : ''}`}>
-                            {(group.exchangeCompletionRate * 100).toFixed(1)}%
+                          <p className={`font-bold ${idx === 1 && (group.exchangeCompletionRate ?? 0) > (test.groups?.[0]?.exchangeCompletionRate ?? 0) ? 'text-green-600' : ''}`}>
+                            {((group.exchangeCompletionRate ?? 0) * 100).toFixed(1)}%
                           </p>
                         </div>
                       </div>
@@ -285,20 +289,20 @@ export default function AIABTestPage() {
                 <div className="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <div>
                     <span className="text-muted-foreground">p-value</span>
-                    <p className={`font-medium mt-1 ${test.pValue < 0.05 ? 'text-green-600' : 'text-gray-600'}`}>
-                      {test.pValue.toFixed(4)}
+                    <p className={`font-medium mt-1 ${(test.pValue ?? 1) < 0.05 ? 'text-green-600' : 'text-gray-600'}`}>
+                      {(test.pValue ?? 0).toFixed(4)}
                     </p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">기간</span>
                     <p className="font-medium mt-1">
-                      {test.period.startDate} ~ {test.period.endDate}
+                      {test.period?.startDate ?? '-'} ~ {test.period?.endDate ?? '-'}
                     </p>
                   </div>
                   <div>
                     <span className="text-muted-foreground">가중치 설정</span>
                     <p className="font-medium mt-1">
-                      키워드: {test.currentWeights.idealKeywordWeight} / 유사도: {test.currentWeights.koSimCSEWeight}
+                      키워드: {test.currentWeights?.idealKeywordWeight ?? '-'} / 유사도: {test.currentWeights?.koSimCSEWeight ?? '-'}
                     </p>
                   </div>
                 </div>
