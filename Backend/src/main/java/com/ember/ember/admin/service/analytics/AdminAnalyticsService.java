@@ -406,7 +406,7 @@ public class AdminAnalyticsService {
         return new JourneyDurationResponse(
                 new JourneyDurationResponse.Period(startDate, endDate, TZ),
                 stats,
-                true,   // degraded — PROFILE_COMPLETED 이벤트 미적재로 updated_at 근사 사용 중
+                true,   // degraded — PROFILE_COMPLETED 이벤트 미적재로 modified_at 근사 사용 중
                 true,   // fallbackUsed — user_activity_events 스트림 대신 원천 테이블 조인
                 new JourneyDurationResponse.Meta("fallback-sql"));
     }

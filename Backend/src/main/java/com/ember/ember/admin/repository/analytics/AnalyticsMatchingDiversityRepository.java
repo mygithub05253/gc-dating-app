@@ -48,6 +48,7 @@ public class AnalyticsMatchingDiversityRepository {
                                           (LN(cd.cnt::float / t.total) / LN(2)))
                            END AS shannon_h
                       FROM candidate_dist cd, totals t
+                     GROUP BY t.total, t.unique_candidates
                 ),
                 rerec AS (
                     SELECT COUNT(*) AS rerec_cnt

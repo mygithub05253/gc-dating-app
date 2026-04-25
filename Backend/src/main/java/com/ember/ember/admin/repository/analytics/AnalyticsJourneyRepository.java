@@ -19,7 +19,7 @@ import java.util.List;
  * 각 단계 "첫 도달 시각" 유도:
  *   - t_signup   : users.created_at
  *   - t_profile  : users.onboarding_step >= 1 인 사용자에 대해 BaseEntity.updatedAt(프로필 완료 시각 추정)
- *                  엔티티에 별도 컬럼이 없어 근사치로 updated_at 사용 (설계서 §3.5.4 J5 — fallback warn)
+ *                  엔티티에 별도 컬럼이 없어 근사치로 modified_at 사용 (설계서 §3.5.4 J5 — fallback warn)
  *   - t_match    : 해당 사용자가 from/to 로 등장한 matchings 중 status='MATCHED' 의 MIN(matched_at)
  *   - t_exchange : 해당 사용자가 user_a/user_b 로 등장한 exchange_rooms 의 MIN(created_at)
  *   - t_couple   : 해당 사용자가 user_a/user_b 로 등장한 couples 의 MIN(confirmed_at)
@@ -49,7 +49,7 @@ public class AnalyticsJourneyRepository {
                     SELECT
                         u.id AS user_id,
                         u.created_at AS t_signup,
-                        CASE WHEN u.onboarding_step >= 1 THEN u.updated_at END AS t_profile,
+                        CASE WHEN u.onboarding_step >= 1 THEN u.modified_at END AS t_profile,
                         (SELECT MIN(m.matched_at)
                            FROM matchings m
                           WHERE m.status = 'MATCHED'
