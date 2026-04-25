@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { eventsApi } from '@/lib/api/events';
 import PageHeader from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/utils/format';
-import { RefreshCw, Plus, Edit, Eye, Pause, Play, Gift, Calendar, Users, TrendingUp, Sparkles, Heart } from 'lucide-react';
+import { RefreshCw, Plus, Edit, Eye, Pause, Play, Gift, Calendar, Users, TrendingUp, Sparkles, Heart, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   BarChart,
@@ -17,108 +19,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-
-// Mock 이벤트/프로모션 데이터
-const MOCK_EVENTS = [
-  {
-    id: 1,
-    title: '봄맞이 교환일기 이벤트',
-    description: '봄을 맞아 교환일기 5회 이상 작성 시 특별 배지 지급!',
-    type: 'EVENT',
-    status: 'ACTIVE',
-    startDate: '2024-03-15T00:00:00',
-    endDate: '2024-04-15T23:59:59',
-    targetAudience: 'ALL',
-    participants: 2345,
-    completions: 1234,
-    conversionRate: 52.6,
-    reward: '봄꽃 배지',
-    createdBy: '이운영',
-  },
-  {
-    id: 2,
-    title: '신규 가입자 웰컴 프로모션',
-    description: '신규 가입 후 7일 내 일기 3회 작성 시 프리미엄 3일 무료 체험',
-    type: 'PROMOTION',
-    status: 'ACTIVE',
-    startDate: '2024-03-01T00:00:00',
-    endDate: '2024-03-31T23:59:59',
-    targetAudience: 'NEW_USERS',
-    participants: 567,
-    completions: 234,
-    conversionRate: 41.3,
-    reward: '프리미엄 3일',
-    createdBy: '김관리',
-  },
-  {
-    id: 3,
-    title: '화이트데이 커플 매칭 이벤트',
-    description: '화이트데이 기간 동안 매칭 성공 커플에게 특별 이모지 지급',
-    type: 'EVENT',
-    status: 'ENDED',
-    startDate: '2024-03-10T00:00:00',
-    endDate: '2024-03-14T23:59:59',
-    targetAudience: 'ALL',
-    participants: 4567,
-    completions: 156,
-    conversionRate: 3.4,
-    reward: '화이트데이 이모지',
-    createdBy: '이운영',
-  },
-  {
-    id: 4,
-    title: '수요일 특별 주제 참여 이벤트',
-    description: '매주 수요일 랜덤 주제로 일기 작성 시 포인트 2배',
-    type: 'EVENT',
-    status: 'ACTIVE',
-    startDate: '2024-03-01T00:00:00',
-    endDate: '2024-06-30T23:59:59',
-    targetAudience: 'ALL',
-    participants: 8901,
-    completions: 6789,
-    conversionRate: 76.3,
-    reward: '포인트 2배',
-    createdBy: '이운영',
-  },
-  {
-    id: 5,
-    title: '벚꽃 시즌 특별 프로모션',
-    description: '4월 한정! 프리미엄 구독 시 첫 달 50% 할인',
-    type: 'PROMOTION',
-    status: 'SCHEDULED',
-    startDate: '2024-04-01T00:00:00',
-    endDate: '2024-04-30T23:59:59',
-    targetAudience: 'ALL',
-    participants: 0,
-    completions: 0,
-    conversionRate: 0,
-    reward: '50% 할인',
-    createdBy: '김관리',
-  },
-  {
-    id: 6,
-    title: '친구 초대 이벤트',
-    description: '친구 초대 시 양쪽 모두 포인트 1000P 지급',
-    type: 'PROMOTION',
-    status: 'PAUSED',
-    startDate: '2024-02-01T00:00:00',
-    endDate: '2024-12-31T23:59:59',
-    targetAudience: 'ALL',
-    participants: 345,
-    completions: 123,
-    conversionRate: 35.7,
-    reward: '1000P',
-    createdBy: '이운영',
-  },
-];
-
-// Mock 이벤트 성과 데이터
-const MOCK_EVENT_PERFORMANCE = [
-  { name: '봄맞이', participants: 2345, completions: 1234 },
-  { name: '웰컴', participants: 567, completions: 234 },
-  { name: '화이트데이', participants: 4567, completions: 156 },
-  { name: '수요일 주제', participants: 8901, completions: 6789 },
-];
+import type { Event, EventStatus } from '@/types/event';
 
 const TYPE_LABELS: Record<string, string> = {
   EVENT: '이벤트',
@@ -154,30 +55,70 @@ const TARGET_LABELS: Record<string, string> = {
 };
 
 export default function EventsManagementPage() {
+  const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
+  const { data: pageData, isLoading, refetch } = useQuery({
+    queryKey: ['events', { status: statusFilter === 'ALL' ? undefined : statusFilter }],
+    queryFn: () =>
+      eventsApi.getList({
+        status: statusFilter === 'ALL' ? undefined : statusFilter as EventStatus,
+        size: 100,
+      }).then(r => r.data.data),
+  });
+
+  const events = pageData?.content ?? [];
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: EventStatus }) =>
+      eventsApi.changeStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      toast.success('이벤트 상태를 변경했습니다.');
+    },
+    onError: () => toast.error('상태 변경에 실패했습니다.'),
+  });
+
   const handleRefresh = () => {
-    toast.success('이벤트 목록을 새로고침했습니다.');
+    refetch().then(() => toast.success('이벤트 목록을 새로고침했습니다.'));
   };
 
   const handleAddEvent = () => {
     toast.success('새 이벤트 생성 모달이 열립니다.');
   };
 
-  const handleToggleStatus = (eventId: number) => {
-    toast.success('이벤트 상태를 변경했습니다.');
+  const handleToggleStatus = (event: Event) => {
+    const newStatus: EventStatus = event.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    statusMutation.mutate({ id: event.id, status: newStatus });
   };
 
-  const filteredEvents = MOCK_EVENTS.filter(event => {
+  const filteredEvents = events.filter((event: Event) => {
     const matchesType = typeFilter === 'ALL' || event.type === typeFilter;
-    const matchesStatus = statusFilter === 'ALL' || event.status === statusFilter;
-    return matchesType && matchesStatus;
+    return matchesType;
   });
 
-  const activeCount = MOCK_EVENTS.filter(e => e.status === 'ACTIVE').length;
-  const totalParticipants = MOCK_EVENTS.reduce((sum, e) => sum + e.participants, 0);
-  const totalCompletions = MOCK_EVENTS.reduce((sum, e) => sum + e.completions, 0);
+  const activeCount = events.filter((e: Event) => e.status === 'ACTIVE').length;
+  const totalParticipants = events.reduce((sum: number, e: Event) => sum + (e.participantCount ?? 0), 0);
+  const totalCompletions = events.reduce((sum: number, e: Event) => sum + (e.completionCount ?? 0), 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // 성과 비교 차트 데이터
+  const performanceData = filteredEvents
+    .filter((e: Event) => e.participantCount > 0)
+    .slice(0, 6)
+    .map((e: Event) => ({
+      name: e.title.length > 8 ? e.title.substring(0, 8) + '...' : e.title,
+      participants: e.participantCount,
+      completions: e.completionCount,
+    }));
 
   return (
     <div>
@@ -243,29 +184,31 @@ export default function EventsManagementPage() {
       </div>
 
       {/* Performance Chart */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>이벤트 성과 비교</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={MOCK_EVENT_PERFORMANCE}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" stroke="#6b7280" fontSize={12} />
-              <YAxis stroke="#6b7280" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                }}
-              />
-              <Bar dataKey="participants" name="참여자" fill="#93c5fd" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="completions" name="완료" fill="#c084fc" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      {performanceData.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>이벤트 성과 비교</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={performanceData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="name" stroke="#6b7280" fontSize={12} />
+                <YAxis stroke="#6b7280" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                  }}
+                />
+                <Bar dataKey="participants" name="참여자" fill="#93c5fd" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="completions" name="완료" fill="#c084fc" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <div className="mb-6 flex gap-2">
@@ -293,83 +236,85 @@ export default function EventsManagementPage() {
 
       {/* Events List */}
       <div className="grid gap-4">
-        {filteredEvents.map(event => (
-          <Card key={event.id} className={event.status === 'ENDED' ? 'opacity-60' : ''}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge className={TYPE_COLORS[event.type]}>
-                      {TYPE_LABELS[event.type]}
-                    </Badge>
-                    <Badge className={STATUS_COLORS[event.status]}>
-                      {STATUS_LABELS[event.status]}
-                    </Badge>
-                    <Badge variant="outline">
-                      {TARGET_LABELS[event.targetAudience]}
-                    </Badge>
-                  </div>
-                  <h3 className="mt-2 font-semibold">{event.title}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{event.description}</p>
-                </div>
-                <div className="flex gap-1 ml-4">
-                  {event.status === 'ACTIVE' ? (
-                    <Button variant="ghost" size="sm" onClick={() => handleToggleStatus(event.id)}>
-                      <Pause className="h-4 w-4" />
-                    </Button>
-                  ) : event.status === 'PAUSED' ? (
-                    <Button variant="ghost" size="sm" onClick={() => handleToggleStatus(event.id)}>
-                      <Play className="h-4 w-4" />
-                    </Button>
-                  ) : null}
-                  <Button variant="ghost" size="sm">
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Calendar className="h-3 w-3" /> 기간
-                  </span>
-                  <p className="font-medium mt-1">
-                    {formatDateTime(event.startDate).split(' ')[0]} ~ {formatDateTime(event.endDate).split(' ')[0]}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Users className="h-3 w-3" /> 참여자
-                  </span>
-                  <p className="font-medium mt-1">{event.participants.toLocaleString()}명</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Gift className="h-3 w-3" /> 완료
-                  </span>
-                  <p className="font-medium mt-1">{event.completions.toLocaleString()}명</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <TrendingUp className="h-3 w-3" /> 전환율
-                  </span>
-                  <p className={`font-medium mt-1 ${event.conversionRate >= 50 ? 'text-green-600' : event.conversionRate >= 30 ? 'text-yellow-600' : 'text-red-600'}`}>
-                    {event.conversionRate}%
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground flex items-center gap-1">
-                    <Heart className="h-3 w-3" /> 보상
-                  </span>
-                  <p className="font-medium mt-1">{event.reward}</p>
-                </div>
-              </div>
+        {filteredEvents.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center text-muted-foreground">
+              등록된 이벤트가 없습니다.
             </CardContent>
           </Card>
-        ))}
+        ) : (
+          filteredEvents.map((event: Event) => (
+            <Card key={event.id} className={event.status === 'ENDED' ? 'opacity-60' : ''}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge className={TYPE_COLORS[event.type]}>
+                        {TYPE_LABELS[event.type]}
+                      </Badge>
+                      <Badge className={STATUS_COLORS[event.status]}>
+                        {STATUS_LABELS[event.status]}
+                      </Badge>
+                      <Badge variant="outline">
+                        {TARGET_LABELS[event.target] ?? event.target}
+                      </Badge>
+                    </div>
+                    <h3 className="mt-2 font-semibold">{event.title}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{event.description}</p>
+                  </div>
+                  <div className="flex gap-1 ml-4">
+                    {event.status === 'ACTIVE' ? (
+                      <Button variant="ghost" size="sm" onClick={() => handleToggleStatus(event)}>
+                        <Pause className="h-4 w-4" />
+                      </Button>
+                    ) : event.status === 'PAUSED' ? (
+                      <Button variant="ghost" size="sm" onClick={() => handleToggleStatus(event)}>
+                        <Play className="h-4 w-4" />
+                      </Button>
+                    ) : null}
+                    <Button variant="ghost" size="sm">
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Calendar className="h-3 w-3" /> 기간
+                    </span>
+                    <p className="font-medium mt-1">
+                      {formatDateTime(event.startDate).split(' ')[0]} ~ {formatDateTime(event.endDate).split(' ')[0]}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Users className="h-3 w-3" /> 참여자
+                    </span>
+                    <p className="font-medium mt-1">{(event.participantCount ?? 0).toLocaleString()}명</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Gift className="h-3 w-3" /> 완료
+                    </span>
+                    <p className="font-medium mt-1">{(event.completionCount ?? 0).toLocaleString()}명</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" /> 전환율
+                    </span>
+                    <p className={`font-medium mt-1 ${(event.conversionRate ?? 0) >= 50 ? 'text-green-600' : (event.conversionRate ?? 0) >= 30 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {event.conversionRate ?? 0}%
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   );

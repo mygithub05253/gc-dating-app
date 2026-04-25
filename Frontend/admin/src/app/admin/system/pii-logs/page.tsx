@@ -3,8 +3,9 @@
 // PII 접근 로그 페이지 — 관리자의 개인정보 접근 이력 감사 (Fail-Closed, SUPER_ADMIN 전용)
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import apiClient from '@/lib/api/client';
 import PageHeader from '@/components/layout/PageHeader';
-import MockPageNotice from '@/components/common/MockPageNotice';
 import DataTable from '@/components/common/DataTable';
 import SearchBar from '@/components/common/SearchBar';
 import Pagination from '@/components/common/Pagination';
@@ -12,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/utils/format';
 import type { DataTableColumn } from '@/components/common/DataTable';
+import { Loader2 } from 'lucide-react';
 
 type AccessType = 'EMAIL_VIEW' | 'REAL_NAME_VIEW' | 'PHONE_VIEW';
 
@@ -23,6 +25,12 @@ interface PiiAccessLog {
   targetUserId: number;
   targetNickname: string;
   ipAddress: string;
+}
+
+interface PiiAccessLogPage {
+  content: PiiAccessLog[];
+  totalElements: number;
+  totalPages: number;
 }
 
 const ACCESS_TYPE_LABELS: Record<AccessType, string> = {
@@ -37,83 +45,7 @@ const ACCESS_TYPE_COLORS: Record<AccessType, string> = {
   PHONE_VIEW: 'bg-red-50 text-red-700 border-red-200',
 };
 
-// Mock PII 접근 로그 8건
-const MOCK_PII_LOGS: PiiAccessLog[] = [
-  {
-    id: 1,
-    accessedAt: '2024-03-25T09:12:00',
-    adminEmail: 'super@ember.kr',
-    accessType: 'EMAIL_VIEW',
-    targetUserId: 1042,
-    targetNickname: '달빛산책',
-    ipAddress: '192.168.1.10',
-  },
-  {
-    id: 2,
-    accessedAt: '2024-03-25T10:33:00',
-    adminEmail: 'admin1@ember.kr',
-    accessType: 'REAL_NAME_VIEW',
-    targetUserId: 2087,
-    targetNickname: '봄바람',
-    ipAddress: '10.0.0.45',
-  },
-  {
-    id: 3,
-    accessedAt: '2024-03-25T11:05:00',
-    adminEmail: 'super@ember.kr',
-    accessType: 'PHONE_VIEW',
-    targetUserId: 3319,
-    targetNickname: '별헤는밤',
-    ipAddress: '192.168.1.10',
-  },
-  {
-    id: 4,
-    accessedAt: '2024-03-24T14:20:00',
-    adminEmail: 'admin2@ember.kr',
-    accessType: 'EMAIL_VIEW',
-    targetUserId: 876,
-    targetNickname: '설레임',
-    ipAddress: '10.0.0.52',
-  },
-  {
-    id: 5,
-    accessedAt: '2024-03-24T15:48:00',
-    adminEmail: 'admin1@ember.kr',
-    accessType: 'EMAIL_VIEW',
-    targetUserId: 4521,
-    targetNickname: '커피향',
-    ipAddress: '10.0.0.45',
-  },
-  {
-    id: 6,
-    accessedAt: '2024-03-23T09:30:00',
-    adminEmail: 'super@ember.kr',
-    accessType: 'REAL_NAME_VIEW',
-    targetUserId: 1234,
-    targetNickname: '노을빛',
-    ipAddress: '192.168.1.10',
-  },
-  {
-    id: 7,
-    accessedAt: '2024-03-22T16:10:00',
-    adminEmail: 'admin2@ember.kr',
-    accessType: 'PHONE_VIEW',
-    targetUserId: 5678,
-    targetNickname: '청명한하늘',
-    ipAddress: '10.0.0.52',
-  },
-  {
-    id: 8,
-    accessedAt: '2024-03-21T11:55:00',
-    adminEmail: 'admin1@ember.kr',
-    accessType: 'REAL_NAME_VIEW',
-    targetUserId: 987,
-    targetNickname: '잔잔한물결',
-    ipAddress: '10.0.0.45',
-  },
-];
-
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 20;
 
 const columns: DataTableColumn<PiiAccessLog>[] = [
   {
@@ -164,7 +96,7 @@ const columns: DataTableColumn<PiiAccessLog>[] = [
 export default function PiiLogsPage() {
   const { hasPermission } = useAuthStore();
   const [keyword, setKeyword] = useState('');
-  const [page, setPage] = useState(0); // 0-based
+  const [page, setPage] = useState(0);
 
   // SUPER_ADMIN 권한 가드
   if (!hasPermission('SUPER_ADMIN')) {
@@ -175,13 +107,20 @@ export default function PiiLogsPage() {
     );
   }
 
-  // 관리자 이메일 기준 검색
-  const filtered = MOCK_PII_LOGS.filter(
-    (log) => !keyword || log.adminEmail.includes(keyword),
-  );
+  const { data: pageData, isLoading } = useQuery<PiiAccessLogPage>({
+    queryKey: ['pii-access-logs', { search: keyword, page, size: PAGE_SIZE }],
+    queryFn: () =>
+      apiClient.get('/api/admin/pii-access-logs', {
+        params: {
+          search: keyword || undefined,
+          page,
+          size: PAGE_SIZE,
+        },
+      }).then(r => r.data.data),
+  });
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const logs = pageData?.content ?? [];
+  const totalPages = pageData?.totalPages ?? 1;
 
   const handleKeywordChange = (value: string) => {
     setKeyword(value);
@@ -195,8 +134,6 @@ export default function PiiLogsPage() {
         description="관리자의 개인정보 접근 이력 (Fail-Closed 감사)"
       />
 
-      <MockPageNotice message="백엔드 API 준비 중 — PII 접근 감사 로그" />
-
       {/* 검색 */}
       <div className="mb-4 max-w-sm">
         <SearchBar
@@ -206,18 +143,28 @@ export default function PiiLogsPage() {
         />
       </div>
 
-      {/* 데이터 테이블 */}
-      <DataTable
-        columns={columns}
-        data={paged}
-        rowKey={(row) => row.id}
-        emptyState="접근 로그가 없습니다."
-      />
+      {isLoading ? (
+        <div className="flex h-32 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
+          {/* 데이터 테이블 */}
+          <DataTable
+            columns={columns}
+            data={logs}
+            rowKey={(row) => row.id}
+            emptyState="접근 로그가 없습니다."
+          />
 
-      {/* 페이지네이션 */}
-      <div className="mt-4">
-        <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
-      </div>
+          {/* 페이지네이션 */}
+          {totalPages > 1 && (
+            <div className="mt-4">
+              <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

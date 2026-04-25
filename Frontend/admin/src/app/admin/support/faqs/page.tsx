@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import PageHeader from '@/components/layout/PageHeader';
-import MockPageNotice from '@/components/common/MockPageNotice';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +9,13 @@ import { Input } from '@/components/ui/input';
 import { useAuthStore } from '@/stores/authStore';
 import { FAQ_CATEGORY_LABELS, FAQ_CATEGORY_COLORS } from '@/lib/constants';
 import type { FAQ, FAQCategory } from '@/types/support';
+import {
+  useAdminFaqsList,
+  useCreateAdminFaq,
+  useUpdateAdminFaq,
+  useDeleteAdminFaq,
+  useReorderAdminFaq,
+} from '@/hooks/useAdminFaqs';
 import {
   HelpCircle,
   Plus,
@@ -20,78 +26,11 @@ import {
   ChevronUp,
   ChevronDown,
   Search,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// Mock FAQ 데이터 (관리자_API_통합명세서_v2.0 §22)
-const MOCK_FAQS: FAQ[] = [
-  {
-    id: 1,
-    category: 'ACCOUNT',
-    question: '비밀번호를 잊어버렸어요. 어떻게 재설정하나요?',
-    answer: '로그인 화면에서 **"비밀번호 찾기"** 버튼을 클릭하면 이메일로 재설정 링크가 전송됩니다.',
-    displayOrder: 1,
-    viewCount: 342,
-    isActive: true,
-    createdAt: '2026-03-01T00:00:00',
-    updatedAt: '2026-04-01T00:00:00',
-  },
-  {
-    id: 2,
-    category: 'ACCOUNT',
-    question: '회원 탈퇴는 어떻게 하나요?',
-    answer: '마이페이지 > 설정 > 회원 탈퇴 메뉴를 통해 탈퇴할 수 있습니다. 탈퇴 후 30일간 데이터가 보관됩니다.',
-    displayOrder: 2,
-    viewCount: 218,
-    isActive: true,
-    createdAt: '2026-03-01T00:00:00',
-    updatedAt: '2026-04-01T00:00:00',
-  },
-  {
-    id: 3,
-    category: 'MATCHING',
-    question: '매칭이 잘 안 되는 이유가 뭔가요?',
-    answer: '매칭은 AI 알고리즘이 일기 스타일, 관심사, 라이프스타일 등을 종합적으로 분석하여 진행됩니다. 일기를 꾸준히 작성할수록 더 정확한 매칭이 이루어집니다.',
-    displayOrder: 1,
-    viewCount: 512,
-    isActive: true,
-    createdAt: '2026-03-05T00:00:00',
-    updatedAt: '2026-04-01T00:00:00',
-  },
-  {
-    id: 4,
-    category: 'DIARY',
-    question: '일기는 최소 몇 글자를 써야 하나요?',
-    answer: '일기는 최소 **100자** 이상 작성해야 AI 분석이 진행됩니다. 더 많이 쓸수록 분석 정확도가 높아집니다.',
-    displayOrder: 1,
-    viewCount: 389,
-    isActive: true,
-    createdAt: '2026-03-10T00:00:00',
-    updatedAt: '2026-04-01T00:00:00',
-  },
-  {
-    id: 5,
-    category: 'DIARY',
-    question: '교환일기 기간은 얼마나 되나요?',
-    answer: '교환일기는 기본 **14일** 과정이며, 서로 번갈아 가며 일기를 작성합니다. 7회씩 작성 완료 후 매칭 결과가 공개됩니다.',
-    displayOrder: 2,
-    viewCount: 276,
-    isActive: true,
-    createdAt: '2026-03-10T00:00:00',
-    updatedAt: '2026-04-01T00:00:00',
-  },
-  {
-    id: 6,
-    category: 'PAYMENT',
-    question: '환불 정책이 어떻게 되나요?',
-    answer: '구독 서비스는 이용 시작 후 7일 이내 환불이 가능합니다. 이후에는 남은 기간에 비례하여 부분 환불됩니다.',
-    displayOrder: 1,
-    viewCount: 145,
-    isActive: false,
-    createdAt: '2026-03-15T00:00:00',
-    updatedAt: '2026-04-10T00:00:00',
-  },
-];
+import { useQueryClient } from '@tanstack/react-query';
 
 const FAQ_CATEGORIES: FAQCategory[] = ['ACCOUNT', 'MATCHING', 'DIARY', 'PAYMENT', 'ETC'];
 
@@ -111,17 +50,30 @@ const INITIAL_FORM: FAQFormData = {
 
 export default function FAQsPage() {
   const { hasPermission } = useAuthStore();
-  const [faqs, setFaqs] = useState<FAQ[]>(MOCK_FAQS);
+  const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | FAQCategory>('ALL');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<FAQFormData>(INITIAL_FORM);
 
-  // 표시할 FAQ: 카테고리 + 검색어 필터링
+  const { data: pageData, isLoading, isError } = useAdminFaqsList({
+    category: selectedCategory === 'ALL' ? undefined : selectedCategory,
+  });
+  const createMutation = useCreateAdminFaq();
+  const updateMutation = useUpdateAdminFaq();
+  const deleteMutation = useDeleteAdminFaq();
+  const reorderMutation = useReorderAdminFaq();
+
+  // For stats, load all FAQs
+  const { data: allPageData } = useAdminFaqsList({});
+  const allFaqs: FAQ[] = allPageData?.content ?? [];
+
+  const faqs: FAQ[] = pageData?.content ?? [];
+
+  // Client-side search keyword filter
   const displayFaqs = faqs
     .filter((f) => {
-      if (selectedCategory !== 'ALL' && f.category !== selectedCategory) return false;
       const kw = searchKeyword.trim();
       if (!kw) return true;
       return f.question.includes(kw) || f.answer.includes(kw);
@@ -150,29 +102,15 @@ export default function FAQsPage() {
       toast.error('질문과 답변을 모두 입력해주세요.');
       return;
     }
-    const now = new Date().toISOString();
 
     if (editingId !== null) {
-      // 수정
-      setFaqs((prev) =>
-        prev.map((f) =>
-          f.id === editingId ? { ...f, ...form, updatedAt: now } : f,
-        ),
-      );
-      toast.success('FAQ가 수정되었습니다.');
+      updateMutation.mutate({ id: editingId, body: form });
     } else {
-      // 신규 등록
-      const sameCatFaqs = faqs.filter((f) => f.category === form.category);
-      const newFaq: FAQ = {
-        id: Math.max(0, ...faqs.map((f) => f.id)) + 1,
+      const sameCatFaqs = allFaqs.filter((f) => f.category === form.category);
+      createMutation.mutate({
         ...form,
         displayOrder: sameCatFaqs.length + 1,
-        viewCount: 0,
-        createdAt: now,
-        updatedAt: now,
-      };
-      setFaqs((prev) => [...prev, newFaq]);
-      toast.success('FAQ가 등록되었습니다.');
+      });
     }
 
     setShowForm(false);
@@ -181,42 +119,61 @@ export default function FAQsPage() {
   };
 
   const handleDelete = (id: number) => {
-    setFaqs((prev) => prev.filter((f) => f.id !== id));
-    toast.success('FAQ가 삭제되었습니다.');
+    deleteMutation.mutate(id);
   };
 
-  const handleToggleActive = (id: number) => {
-    setFaqs((prev) =>
-      prev.map((f) =>
-        f.id === id ? { ...f, isActive: !f.isActive, updatedAt: new Date().toISOString() } : f,
-      ),
-    );
-    const target = faqs.find((f) => f.id === id);
-    toast.success(target?.isActive ? 'FAQ가 비활성화되었습니다.' : 'FAQ가 활성화되었습니다.');
+  const handleToggleActive = (faq: FAQ) => {
+    updateMutation.mutate({
+      id: faq.id,
+      body: { isActive: !faq.isActive },
+    });
   };
 
   // 카테고리 내 순서 변경 (위/아래)
   const handleReorder = (id: number, direction: 'up' | 'down') => {
-    const faq = faqs.find((f) => f.id === id);
+    const faq = displayFaqs.find((f) => f.id === id);
     if (!faq) return;
-    const sameCat = faqs
+    const sameCat = displayFaqs
       .filter((f) => f.category === faq.category)
       .sort((a, b) => a.displayOrder - b.displayOrder);
     const idx = sameCat.findIndex((f) => f.id === id);
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= sameCat.length) return;
-    const swapTarget = sameCat[swapIdx];
-    setFaqs((prev) =>
-      prev.map((f) => {
-        if (f.id === id) return { ...f, displayOrder: swapTarget.displayOrder };
-        if (f.id === swapTarget.id) return { ...f, displayOrder: faq.displayOrder };
-        return f;
-      }),
-    );
+
+    // Build new order
+    const orderedIds = sameCat.map((f) => f.id);
+    [orderedIds[idx], orderedIds[swapIdx]] = [orderedIds[swapIdx], orderedIds[idx]];
+    reorderMutation.mutate({ category: faq.category, orderedIds });
   };
 
-  const activeCount = faqs.filter((f) => f.isActive).length;
-  const totalViewCount = faqs.reduce((sum, f) => sum + f.viewCount, 0);
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-faqs-list'] });
+    toast.success('FAQ 목록을 새로고침했습니다.');
+  };
+
+  const activeCount = allFaqs.filter((f) => f.isActive).length;
+  const totalViewCount = allFaqs.reduce((sum, f) => sum + f.viewCount, 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">FAQ 목록을 불러오는 중...</span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-red-400" />
+        <p className="mt-2">FAQ 목록을 불러오는데 실패했습니다.</p>
+        <Button variant="outline" className="mt-4" onClick={handleRefresh}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -224,8 +181,6 @@ export default function FAQsPage() {
         title="FAQ 관리"
         description="자주 묻는 질문 등록 및 관리"
       />
-
-      <MockPageNotice message="FAQ 도메인 백엔드 API 준비 중입니다. 현재는 Mock 데이터로 화면 흐름만 검증됩니다." />
 
       {/* 통계 */}
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -235,7 +190,7 @@ export default function FAQsPage() {
               <HelpCircle className="h-5 w-5 text-blue-500" />
               <span className="text-sm text-muted-foreground">전체 FAQ</span>
             </div>
-            <div className="mt-2 text-2xl font-bold">{faqs.length}</div>
+            <div className="mt-2 text-2xl font-bold">{allFaqs.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -332,7 +287,10 @@ export default function FAQsPage() {
               >
                 취소
               </Button>
-              <Button onClick={handleSave}>
+              <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+                {(createMutation.isPending || updateMutation.isPending) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 {editingId !== null ? '수정 완료' : '등록'}
               </Button>
             </div>
@@ -364,7 +322,7 @@ export default function FAQsPage() {
                     : 'bg-muted text-muted-foreground hover:bg-muted/70'
                 }`}
               >
-                전체 ({faqs.length})
+                전체 ({allFaqs.length})
               </button>
               {FAQ_CATEGORIES.map((cat) => (
                 <button
@@ -377,7 +335,7 @@ export default function FAQsPage() {
                       : 'bg-muted text-muted-foreground hover:bg-muted/70'
                   }`}
                 >
-                  {FAQ_CATEGORY_LABELS[cat]} ({faqs.filter((f) => f.category === cat).length})
+                  {FAQ_CATEGORY_LABELS[cat]} ({allFaqs.filter((f) => f.category === cat).length})
                 </button>
               ))}
             </div>
@@ -455,7 +413,7 @@ export default function FAQsPage() {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => handleToggleActive(faq.id)}
+                          onClick={() => handleToggleActive(faq)}
                           className="rounded p-1.5 text-muted-foreground hover:bg-muted"
                           title={faq.isActive ? '비활성화' : '활성화'}
                         >

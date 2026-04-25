@@ -1,121 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import apiClient from '@/lib/api/client';
 import PageHeader from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateTime } from '@/lib/utils/format';
-import { RefreshCw, Plus, ToggleLeft, ToggleRight, Settings, Users, Zap, Shield, Smartphone, Brain } from 'lucide-react';
+import { RefreshCw, Plus, ToggleLeft, ToggleRight, Settings, Users, Zap, Shield, Smartphone, Brain, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// Mock 기능 플래그 데이터
-const MOCK_FEATURE_FLAGS = [
-  {
-    id: 1,
-    key: 'MATCHING_V2_ALGORITHM',
-    name: '매칭 알고리즘 V2',
-    description: 'KoSimCSE 기반 새로운 매칭 알고리즘 활성화',
-    category: 'AI',
-    enabled: true,
-    rolloutPercentage: 100,
-    targetUsers: 'ALL',
-    createdAt: '2024-03-01T00:00:00',
-    updatedAt: '2024-03-20T14:30:00',
-    updatedBy: '김관리',
-  },
-  {
-    id: 2,
-    key: 'EMOTION_COACHING',
-    name: '감정 코칭 기능',
-    description: 'AI 기반 감정 코칭 메시지 표시',
-    category: 'AI',
-    enabled: true,
-    rolloutPercentage: 50,
-    targetUsers: 'PREMIUM',
-    createdAt: '2024-02-15T00:00:00',
-    updatedAt: '2024-03-18T10:00:00',
-    updatedBy: '이운영',
-  },
-  {
-    id: 3,
-    key: 'DARK_MODE',
-    name: '다크 모드',
-    description: '앱 다크 모드 지원',
-    category: 'UI',
-    enabled: true,
-    rolloutPercentage: 100,
-    targetUsers: 'ALL',
-    createdAt: '2024-01-10T00:00:00',
-    updatedAt: '2024-03-15T09:00:00',
-    updatedBy: '김관리',
-  },
-  {
-    id: 4,
-    key: 'VOICE_DIARY',
-    name: '음성 일기',
-    description: '음성 녹음을 통한 일기 작성 기능',
-    category: 'FEATURE',
-    enabled: false,
-    rolloutPercentage: 0,
-    targetUsers: 'BETA',
-    createdAt: '2024-03-10T00:00:00',
-    updatedAt: '2024-03-10T00:00:00',
-    updatedBy: '박신입',
-  },
-  {
-    id: 5,
-    key: 'PUSH_NOTIFICATION_V2',
-    name: '푸시 알림 V2',
-    description: '개인화된 푸시 알림 시스템',
-    category: 'NOTIFICATION',
-    enabled: true,
-    rolloutPercentage: 75,
-    targetUsers: 'ALL',
-    createdAt: '2024-02-20T00:00:00',
-    updatedAt: '2024-03-22T16:00:00',
-    updatedBy: '이운영',
-  },
-  {
-    id: 6,
-    key: 'EXTERNAL_CONTACT_DETECTION',
-    name: '외부 연락처 감지',
-    description: '일기/채팅에서 외부 연락처 자동 감지',
-    category: 'SAFETY',
-    enabled: true,
-    rolloutPercentage: 100,
-    targetUsers: 'ALL',
-    createdAt: '2024-01-05T00:00:00',
-    updatedAt: '2024-03-01T11:00:00',
-    updatedBy: '김관리',
-  },
-  {
-    id: 7,
-    key: 'PREMIUM_SUBSCRIPTION',
-    name: '프리미엄 구독',
-    description: '프리미엄 구독 결제 시스템',
-    category: 'PAYMENT',
-    enabled: false,
-    rolloutPercentage: 0,
-    targetUsers: 'NONE',
-    createdAt: '2024-03-15T00:00:00',
-    updatedAt: '2024-03-15T00:00:00',
-    updatedBy: '김관리',
-  },
-  {
-    id: 8,
-    key: 'WEEKLY_RANDOM_TOPIC',
-    name: '수요일 랜덤 주제',
-    description: '매주 수요일 특별 랜덤 주제 제공',
-    category: 'FEATURE',
-    enabled: true,
-    rolloutPercentage: 100,
-    targetUsers: 'ALL',
-    createdAt: '2024-02-01T00:00:00',
-    updatedAt: '2024-03-20T08:00:00',
-    updatedBy: '이운영',
-  },
-];
+import type { FeatureFlag, FeatureFlagCategory } from '@/types/system';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   AI: <Brain className="h-4 w-4" />,
@@ -143,22 +38,30 @@ const TARGET_LABELS: Record<string, string> = {
 };
 
 export default function FeatureFlagsPage() {
-  const [flags, setFlags] = useState(MOCK_FEATURE_FLAGS);
+  const queryClient = useQueryClient();
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
 
+  const { data: flags = [], isLoading, refetch } = useQuery<FeatureFlag[]>({
+    queryKey: ['feature-flags'],
+    queryFn: () => apiClient.get('/api/admin/feature-flags').then(r => r.data.data),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (flagId: number) =>
+      apiClient.patch(`/api/admin/feature-flags/${flagId}/toggle`).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feature-flags'] });
+      toast.success('기능 플래그 상태가 변경되었습니다.');
+    },
+    onError: () => toast.error('상태 변경에 실패했습니다.'),
+  });
+
   const handleRefresh = () => {
-    toast.success('기능 플래그를 새로고침했습니다.');
+    refetch().then(() => toast.success('기능 플래그를 새로고침했습니다.'));
   };
 
   const handleToggle = (flagId: number) => {
-    setFlags(prev =>
-      prev.map(flag =>
-        flag.id === flagId
-          ? { ...flag, enabled: !flag.enabled, updatedAt: new Date().toISOString() }
-          : flag
-      )
-    );
-    toast.success('기능 플래그 상태가 변경되었습니다.');
+    toggleMutation.mutate(flagId);
   };
 
   const handleAddFlag = () => {
@@ -169,8 +72,16 @@ export default function FeatureFlagsPage() {
     flag => categoryFilter === 'ALL' || flag.category === categoryFilter
   );
 
-  const enabledCount = flags.filter(f => f.enabled).length;
-  const disabledCount = flags.filter(f => !f.enabled).length;
+  const enabledCount = flags.filter(f => f.isEnabled).length;
+  const disabledCount = flags.filter(f => !f.isEnabled).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -253,7 +164,7 @@ export default function FeatureFlagsPage() {
       {/* Feature Flags Grid */}
       <div className="grid gap-4 md:grid-cols-2">
         {filteredFlags.map(flag => (
-          <Card key={flag.id} className={`${!flag.enabled ? 'opacity-60' : ''}`}>
+          <Card key={flag.id} className={`${!flag.isEnabled ? 'opacity-60' : ''}`}>
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -263,15 +174,15 @@ export default function FeatureFlagsPage() {
                       {flag.category}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground font-mono">{flag.key}</p>
+                  <p className="mt-1 text-xs text-muted-foreground font-mono">{flag.name}</p>
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => handleToggle(flag.id)}
-                  className={flag.enabled ? 'text-green-600' : 'text-gray-400'}
+                  className={flag.isEnabled ? 'text-green-600' : 'text-gray-400'}
                 >
-                  {flag.enabled ? (
+                  {flag.isEnabled ? (
                     <ToggleRight className="h-6 w-6" />
                   ) : (
                     <ToggleLeft className="h-6 w-6" />
@@ -297,7 +208,7 @@ export default function FeatureFlagsPage() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">대상</span>
-                  <p className="font-medium mt-1">{TARGET_LABELS[flag.targetUsers]}</p>
+                  <p className="font-medium mt-1">{TARGET_LABELS[flag.targetUsers] ?? flag.targetUsers}</p>
                 </div>
               </div>
 

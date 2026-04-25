@@ -8,60 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/utils/format';
-import { Plus, Edit, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// Mock 랜덤 주제 데이터
-const MOCK_TOPICS = [
-  {
-    id: 1,
-    content: '오늘 가장 감사했던 순간은 무엇인가요?',
-    category: 'GRATITUDE',
-    isActive: true,
-    usageCount: 1234,
-    createdAt: '2024-01-15T10:00:00',
-  },
-  {
-    id: 2,
-    content: '최근에 새롭게 도전해본 것이 있나요?',
-    category: 'GROWTH',
-    isActive: true,
-    usageCount: 892,
-    createdAt: '2024-01-20T14:30:00',
-  },
-  {
-    id: 3,
-    content: '요즘 가장 자주 듣는 노래는 무엇인가요?',
-    category: 'DAILY',
-    isActive: true,
-    usageCount: 2156,
-    createdAt: '2024-02-01T09:00:00',
-  },
-  {
-    id: 4,
-    content: '스트레스를 풀 때 주로 무엇을 하나요?',
-    category: 'EMOTION',
-    isActive: true,
-    usageCount: 1567,
-    createdAt: '2024-02-10T11:00:00',
-  },
-  {
-    id: 5,
-    content: '나에게 가장 소중한 사람을 떠올려보세요.',
-    category: 'RELATIONSHIP',
-    isActive: false,
-    usageCount: 456,
-    createdAt: '2024-02-15T16:00:00',
-  },
-  {
-    id: 6,
-    content: '봄이 오면 가장 하고 싶은 것은?',
-    category: 'SEASONAL',
-    isActive: true,
-    usageCount: 789,
-    createdAt: '2024-03-01T10:00:00',
-  },
-];
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { topicsApi } from '@/lib/api/topics';
+import type { Topic, TopicCategory } from '@/types/content';
 
 const CATEGORY_LABELS: Record<string, string> = {
   GRATITUDE: '감사',
@@ -83,43 +34,100 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function TopicsPage() {
   const { hasPermission } = useAuthStore();
-  const [topics, setTopics] = useState(MOCK_TOPICS);
+  const queryClient = useQueryClient();
   const [newTopic, setNewTopic] = useState('');
+  const [newCategory, setNewCategory] = useState<TopicCategory>('DAILY');
   const [isAdding, setIsAdding] = useState(false);
+
+  const { data: pageData, isLoading, isError } = useQuery({
+    queryKey: ['admin-topics-list'],
+    queryFn: () => topicsApi.getList().then((res) => res.data.data),
+    staleTime: 30_000,
+  });
+
+  const topics: Topic[] = pageData?.content ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: (data: { topic: string; category: TopicCategory; weekStartDate: string; isActive?: boolean }) =>
+      topicsApi.create(data),
+    onSuccess: () => {
+      toast.success('새 주제가 추가되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-topics-list'] });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { isActive?: boolean } }) =>
+      topicsApi.update(id, data),
+    onSuccess: () => {
+      toast.success('상태가 변경되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-topics-list'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => topicsApi.delete(id),
+    onSuccess: () => {
+      toast.success('주제가 삭제되었습니다.');
+      queryClient.invalidateQueries({ queryKey: ['admin-topics-list'] });
+    },
+  });
 
   const handleAddTopic = () => {
     if (!newTopic.trim()) {
       toast.error('주제 내용을 입력해주세요.');
       return;
     }
-    const newId = Math.max(...topics.map((t) => t.id)) + 1;
-    setTopics([
-      {
-        id: newId,
-        content: newTopic,
-        category: 'DAILY',
-        isActive: true,
-        usageCount: 0,
-        createdAt: new Date().toISOString(),
-      },
-      ...topics,
-    ]);
+    // weekStartDate: current Monday
+    const now = new Date();
+    const day = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((day + 6) % 7));
+    const weekStartDate = monday.toISOString().slice(0, 10);
+
+    createMutation.mutate({
+      topic: newTopic,
+      category: newCategory,
+      weekStartDate,
+      isActive: true,
+    });
     setNewTopic('');
     setIsAdding(false);
-    toast.success('새 주제가 추가되었습니다.');
   };
 
-  const toggleActive = (id: number) => {
-    setTopics(
-      topics.map((t) => (t.id === id ? { ...t, isActive: !t.isActive } : t))
-    );
-    toast.success('상태가 변경되었습니다.');
+  const toggleActive = (topic: Topic) => {
+    updateMutation.mutate({ id: topic.id, data: { isActive: !topic.isActive } });
   };
 
   const deleteTopic = (id: number) => {
-    setTopics(topics.filter((t) => t.id !== id));
-    toast.success('주제가 삭제되었습니다.');
+    deleteMutation.mutate(id);
   };
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-topics-list'] });
+    toast.success('주제 목록을 새로고침했습니다.');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">주제 목록을 불러오는 중...</span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-red-400" />
+        <p className="mt-2">주제 목록을 불러오는데 실패했습니다.</p>
+        <Button variant="outline" className="mt-4" onClick={handleRefresh}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -128,10 +136,16 @@ export default function TopicsPage() {
         description="교환일기 시작 시 제공되는 랜덤 주제를 관리합니다"
         actions={
           hasPermission('ADMIN') && (
-            <Button onClick={() => setIsAdding(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              새 주제 추가
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleRefresh}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                새로고침
+              </Button>
+              <Button onClick={() => setIsAdding(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                새 주제 추가
+              </Button>
+            </div>
           )
         }
       />
@@ -175,13 +189,26 @@ export default function TopicsPage() {
         <Card className="mb-6">
           <CardContent className="p-4">
             <div className="flex gap-2">
+              <select
+                className="rounded-md border px-3 py-2 text-sm"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value as TopicCategory)}
+              >
+                {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
               <Input
                 placeholder="새로운 주제를 입력하세요..."
                 value={newTopic}
                 onChange={(e) => setNewTopic(e.target.value)}
                 className="flex-1"
               />
-              <Button onClick={handleAddTopic}>추가</Button>
+              <Button onClick={handleAddTopic} disabled={createMutation.isPending}>
+                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : '추가'}
+              </Button>
               <Button variant="outline" onClick={() => setIsAdding(false)}>
                 취소
               </Button>
@@ -197,45 +224,51 @@ export default function TopicsPage() {
         </CardHeader>
         <CardContent className="p-0">
           <div className="divide-y">
-            {topics.map((topic) => (
-              <div
-                key={topic.id}
-                className="flex items-center justify-between p-4 hover:bg-muted/30"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <Badge className={CATEGORY_COLORS[topic.category]}>
-                      {CATEGORY_LABELS[topic.category]}
-                    </Badge>
-                    {!topic.isActive && (
-                      <Badge variant="secondary">비활성</Badge>
-                    )}
-                  </div>
-                  <p className="mt-1 font-medium">{topic.content}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    사용 {topic.usageCount.toLocaleString()}회 | {formatDateTime(topic.createdAt)}
-                  </p>
-                </div>
-                {hasPermission('ADMIN') && (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleActive(topic.id)}
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteTopic(topic.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                  </div>
-                )}
+            {topics.length === 0 ? (
+              <div className="py-16 text-center text-sm text-muted-foreground">
+                등록된 주제가 없습니다.
               </div>
-            ))}
+            ) : (
+              topics.map((topic) => (
+                <div
+                  key={topic.id}
+                  className="flex items-center justify-between p-4 hover:bg-muted/30"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Badge className={CATEGORY_COLORS[topic.category]}>
+                        {CATEGORY_LABELS[topic.category]}
+                      </Badge>
+                      {!topic.isActive && (
+                        <Badge variant="secondary">비활성</Badge>
+                      )}
+                    </div>
+                    <p className="mt-1 font-medium">{topic.content}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      사용 {topic.usageCount.toLocaleString()}회 | {formatDateTime(topic.createdAt)}
+                    </p>
+                  </div>
+                  {hasPermission('ADMIN') && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleActive(topic)}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => deleteTopic(topic.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

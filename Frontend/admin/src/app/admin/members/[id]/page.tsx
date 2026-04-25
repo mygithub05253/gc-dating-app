@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { AnalyticsLoading, AnalyticsError } from '@/components/common/AnalyticsStatus';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/utils/format';
 import { USER_STATUS_LABELS, USER_STATUS_COLORS, GENDER_LABELS } from '@/lib/constants';
@@ -26,6 +27,7 @@ import {
   Unlock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useMemberDetail, useSanctionMember, useReleaseSanction } from '@/hooks/useUsers';
 
 // v2.1 신규: UNBLOCK 사유 카테고리 (관리자 기능명세서 9.x)
 type UnblockReasonCategory =
@@ -54,102 +56,6 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
-// ---- Mock 데이터 ----
-const MOCK_USERS: Record<string, any> = {
-  '1': {
-    id: 1,
-    nickname: '별빛소녀',
-    gender: 'FEMALE',
-    age: 27,
-    status: 'ACTIVE',
-    createdAt: '2024-01-15T10:30:00',
-    lastActivityAt: '2024-03-22T09:15:00',
-    diaryCount: 45,
-    matchCount: 8,
-    exchangeCompletionRate: 87.5,
-    matchHistory: [
-      { id: 1, partnerNickname: '달빛청년', matchedAt: '2024-03-20T10:00:00', status: 'COMPLETED' },
-      { id: 2, partnerNickname: '하늘바람', matchedAt: '2024-03-15T14:00:00', status: 'COMPLETED' },
-      { id: 3, partnerNickname: '별하나', matchedAt: '2024-03-10T09:00:00', status: 'EXPIRED' },
-      { id: 4, partnerNickname: '구름위로', matchedAt: '2024-03-05T16:00:00', status: 'COMPLETED' },
-      { id: 5, partnerNickname: '바다소리', matchedAt: '2024-02-28T11:00:00', status: 'COMPLETED' },
-    ],
-    sanctions: [],
-    reports: [],
-    socialLogins: [
-      { provider: 'KAKAO', connectedAt: '2024-01-15T10:30:00', email: 'minji@kakao.com' },
-    ],
-  },
-  '3': {
-    id: 3,
-    nickname: '푸른바다',
-    gender: 'MALE',
-    age: 31,
-    status: 'BANNED',
-    createdAt: '2023-11-05T09:00:00',
-    lastActivityAt: '2024-03-20T22:30:00',
-    diaryCount: 12,
-    matchCount: 2,
-    exchangeCompletionRate: 20.0,
-    matchHistory: [],
-    sanctions: [
-      {
-        id: 2,
-        type: 'SUSPEND_PERMANENT',
-        reason: '반복 성적 콘텐츠 게재',
-        memo: '3회 이상 성적 콘텐츠 신고 누적으로 영구 정지 처분 (SUPER_ADMIN 결재).',
-        createdAt: '2024-03-15T10:00:00',
-        adminNickname: '박슈퍼',
-      },
-    ],
-    reports: [
-      { id: 10, reason: 'SEXUAL', status: 'RESOLVED', createdAt: '2024-03-14T10:00:00', reporterNickname: '익명유저A' },
-      { id: 11, reason: 'SEXUAL', status: 'RESOLVED', createdAt: '2024-03-12T08:00:00', reporterNickname: '익명유저B' },
-      { id: 12, reason: 'SEXUAL', status: 'RESOLVED', createdAt: '2024-03-10T19:00:00', reporterNickname: '익명유저C' },
-    ],
-    socialLogins: [
-      { provider: 'KAKAO', connectedAt: '2023-11-05T09:00:00', email: 'blue@kakao.com' },
-    ],
-  },
-  '2': {
-    id: 2,
-    nickname: '달빛청년',
-    gender: 'MALE',
-    age: 28,
-    status: 'DEACTIVATED',
-    withdrawnAt: '2024-03-25T00:00:00',
-    createdAt: '2024-02-01T14:00:00',
-    lastActivityAt: '2024-03-18T22:30:00',
-    diaryCount: 23,
-    matchCount: 4,
-    exchangeCompletionRate: 62.0,
-    matchHistory: [
-      { id: 6, partnerNickname: '별빛소녀', matchedAt: '2024-03-20T10:00:00', status: 'COMPLETED' },
-      { id: 7, partnerNickname: '초록숲', matchedAt: '2024-03-12T08:00:00', status: 'CANCELLED' },
-      { id: 8, partnerNickname: '노을빛', matchedAt: '2024-03-01T17:00:00', status: 'COMPLETED' },
-      { id: 9, partnerNickname: '은하수', matchedAt: '2024-02-20T13:00:00', status: 'EXPIRED' },
-    ],
-    sanctions: [
-      {
-        id: 1,
-        type: 'SUSPEND_7D',
-        reason: '부적절한 언어 사용',
-        memo: '반복적 욕설 사용으로 인한 7일 정지 처분',
-        createdAt: '2024-03-10T10:00:00',
-        adminNickname: '관리자1',
-      },
-    ],
-    reports: [
-      { id: 1, reason: 'PROFANITY', status: 'RESOLVED', createdAt: '2024-03-10T10:00:00', reporterNickname: '익명유저' },
-      { id: 2, reason: 'SPAM', status: 'PENDING', createdAt: '2024-03-19T08:00:00', reporterNickname: '익명유저2' },
-    ],
-    socialLogins: [
-      { provider: 'GOOGLE', connectedAt: '2024-02-01T14:00:00', email: 'junho@gmail.com' },
-      { provider: 'KAKAO', connectedAt: '2024-02-05T09:00:00', email: 'junho@kakao.com' },
-    ],
-  },
-};
-
 // DEACTIVATED(탈퇴 예정) 상태에서 D-day 계산
 function getWithdrawnDDay(withdrawnAt: string): string {
   const target = new Date(withdrawnAt);
@@ -173,7 +79,6 @@ export default function UserDetailPage() {
   const router = useRouter();
   const { hasPermission } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [sanctionMemo, setSanctionMemo] = useState('');
   const [sanctionMemoError, setSanctionMemoError] = useState('');
   // v2.1 신규: UNBLOCK (제재 해제) 상태
@@ -182,8 +87,12 @@ export default function UserDetailPage() {
   const [unblockReason, setUnblockReason] = useState('');
   const [unblockError, setUnblockError] = useState('');
 
-  const userId = params.id as string;
-  const user = MOCK_USERS[userId] || MOCK_USERS['1'];
+  const userId = Number(params.id);
+  const { data: user, isLoading, isError, error } = useMemberDetail(userId);
+  const sanctionMutation = useSanctionMember();
+  const releaseMutation = useReleaseSanction();
+
+  const isProcessing = sanctionMutation.isPending || releaseMutation.isPending;
 
   // ---- 제재 핸들러 ----
   const validateMemo = (): boolean => {
@@ -195,55 +104,54 @@ export default function UserDetailPage() {
     return true;
   };
 
-  const handleSuspend7Day = async () => {
+  const handleSuspend7Day = () => {
     if (!validateMemo()) return;
-    setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success('7일 정지 처리되었습니다.');
-    setSanctionMemo('');
-    setIsProcessing(false);
+    sanctionMutation.mutate(
+      { id: userId, type: '7DAY', memo: sanctionMemo },
+      { onSuccess: () => setSanctionMemo('') },
+    );
   };
 
-  const handleBanPermanent = async () => {
+  const handleBanPermanent = () => {
     if (!validateMemo()) return;
-    setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success('영구 정지 처리되었습니다.');
-    setSanctionMemo('');
-    setIsProcessing(false);
+    sanctionMutation.mutate(
+      { id: userId, type: 'PERMANENT', memo: sanctionMemo },
+      { onSuccess: () => setSanctionMemo('') },
+    );
   };
 
-  const handleBanImmediatePermanent = async () => {
+  const handleBanImmediatePermanent = () => {
     if (!validateMemo()) return;
-    setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success('즉시 영구 정지 처리되었습니다.');
-    setSanctionMemo('');
-    setIsProcessing(false);
+    sanctionMutation.mutate(
+      { id: userId, type: 'IMMEDIATE_PERMANENT', memo: sanctionMemo },
+      { onSuccess: () => setSanctionMemo('') },
+    );
   };
 
-  const handleUnsuspend = async () => {
-    setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success('정지가 해제되었습니다.');
-    setIsProcessing(false);
+  const handleUnsuspend = () => {
+    releaseMutation.mutate({ id: userId, reason: '정지 해제' });
   };
 
   // v2.1: 제재 해제(UNBLOCK) — BANNED 상태, SUPER_ADMIN 전용, 사유 카테고리 + 10자 이상 사유
-  const handleUnblock = async () => {
+  const handleUnblock = () => {
     if (unblockReason.trim().length < 10) {
       setUnblockError('해제 사유는 최소 10자 이상 입력해야 합니다.');
       return;
     }
     setUnblockError('');
-    setIsProcessing(true);
-    await new Promise((r) => setTimeout(r, 500));
-    toast.success(
-      `제재가 해제되었습니다. (${UNBLOCK_REASON_LABELS[unblockCategory]}) — 사용자는 다음 로그인 시 환영 모달을 보게 됩니다.`,
+    const reason = `[${UNBLOCK_REASON_LABELS[unblockCategory]}] ${unblockReason}`;
+    releaseMutation.mutate(
+      { id: userId, reason },
+      {
+        onSuccess: () => {
+          toast.success(
+            `제재가 해제되었습니다. (${UNBLOCK_REASON_LABELS[unblockCategory]}) — 사용자는 다음 로그인 시 환영 모달을 보게 됩니다.`,
+          );
+          setUnblockOpen(false);
+          setUnblockReason('');
+        },
+      },
     );
-    setUnblockOpen(false);
-    setUnblockReason('');
-    setIsProcessing(false);
   };
 
   // ---- 탭 필터 (ADMIN+ 전용 탭) ----
@@ -253,6 +161,30 @@ export default function UserDetailPage() {
     }
     return true;
   });
+
+  if (isLoading) {
+    return (
+      <div>
+        <Button variant="ghost" onClick={() => router.push('/admin/members')} className="mb-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          목록으로
+        </Button>
+        <AnalyticsLoading label="회원 정보를 불러오는 중입니다..." />
+      </div>
+    );
+  }
+
+  if (isError || !user) {
+    return (
+      <div>
+        <Button variant="ghost" onClick={() => router.push('/admin/members')} className="mb-4">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          목록으로
+        </Button>
+        <AnalyticsError message={error?.message || '회원 정보를 불러오지 못했습니다.'} />
+      </div>
+    );
+  }
 
   // ---- 렌더링 ----
   return (
@@ -306,8 +238,8 @@ export default function UserDetailPage() {
                   <span>{GENDER_LABELS[user.gender] || user.gender}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">나이:</span>
-                  <span>{user.age}세</span>
+                  <span className="text-muted-foreground">생년월일:</span>
+                  <span>{user.birthDate}</span>
                 </div>
               </div>
               <div className="space-y-3">
@@ -321,9 +253,9 @@ export default function UserDetailPage() {
                   <Badge className={USER_STATUS_COLORS[user.status]}>
                     {USER_STATUS_LABELS[user.status]}
                   </Badge>
-                  {user.status === 'DEACTIVATED' && user.withdrawnAt && (
+                  {user.status === 'DEACTIVATED' && user.suspendUntil && (
                     <Badge variant="outline" className="ml-1 text-orange-600 border-orange-300">
-                      {getWithdrawnDDay(user.withdrawnAt)}
+                      {getWithdrawnDDay(user.suspendUntil)}
                     </Badge>
                   )}
                 </div>
@@ -362,17 +294,17 @@ export default function UserDetailPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-green-500" />
-                <span>교환 완료율</span>
+                <span>교환일기 방</span>
               </div>
-              <span className="font-bold">{user.exchangeCompletionRate}%</span>
+              <span className="font-bold">{user.exchangeRoomCount}개</span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
-                <span>마지막 활동</span>
+                <span>마지막 로그인</span>
               </div>
-              <span className="font-bold">{formatDateTime(user.lastActivityAt)}</span>
+              <span className="font-bold">{user.lastLoginAt ? formatDateTime(user.lastLoginAt) : '-'}</span>
             </div>
           </CardContent>
         </Card>
@@ -384,30 +316,25 @@ export default function UserDetailPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Heart className="h-5 w-5" />
-              매칭 이력 (최근 10건)
+              최근 일기
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {user.matchHistory && user.matchHistory.length > 0 ? (
+            {user.recentDiaries && user.recentDiaries.length > 0 ? (
               <div className="space-y-3">
-                {user.matchHistory.slice(0, 10).map((match: any) => (
-                  <div key={match.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                {user.recentDiaries.map((diary) => (
+                  <div key={diary.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
                     <div>
-                      <span className="font-medium">{match.partnerNickname}</span>
+                      <span className="font-medium">{diary.title}</span>
                       <p className="text-xs text-muted-foreground">
-                        {formatDateTime(match.matchedAt)}
+                        {formatDateTime(diary.createdAt)}
                       </p>
                     </div>
-                    <Badge
-                      variant={match.status === 'COMPLETED' ? 'default' : 'secondary'}
-                    >
-                      {MATCH_STATUS_LABELS[match.status] || match.status}
-                    </Badge>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">매칭 이력이 없습니다.</p>
+              <p className="text-sm text-muted-foreground">최근 일기가 없습니다.</p>
             )}
           </CardContent>
         </Card>
@@ -570,21 +497,13 @@ export default function UserDetailPage() {
               <CardTitle>제재 이력</CardTitle>
             </CardHeader>
             <CardContent>
-              {user.sanctions && user.sanctions.length > 0 ? (
-                <div className="space-y-3">
-                  {user.sanctions.map((sanction: any) => (
-                    <div key={sanction.id} className="rounded-lg border p-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <Badge variant="destructive">{sanction.type}</Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDateTime(sanction.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium">{sanction.reason}</p>
-                      <p className="text-xs text-muted-foreground mt-1">메모: {sanction.memo}</p>
-                      <p className="text-xs text-muted-foreground">처리자: {sanction.adminNickname}</p>
-                    </div>
-                  ))}
+              {user.suspendReason ? (
+                <div className="rounded-lg border p-3">
+                  <Badge variant="destructive">{user.status}</Badge>
+                  <p className="text-sm font-medium mt-2">{user.suspendReason}</p>
+                  {user.suspendUntil && (
+                    <p className="text-xs text-muted-foreground mt-1">정지 해제일: {formatDateTime(user.suspendUntil)}</p>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">제재 이력이 없습니다.</p>
@@ -601,14 +520,14 @@ export default function UserDetailPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {user.reports && user.reports.length > 0 ? (
+              {user.reportHistory && user.reportHistory.length > 0 ? (
                 <div className="space-y-3">
-                  {user.reports.map((report: any) => (
+                  {user.reportHistory.map((report) => (
                     <div key={report.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
                       <div>
                         <span className="text-sm font-medium">{report.reason}</span>
                         <p className="text-xs text-muted-foreground">
-                          신고자: {report.reporterNickname} | {formatDateTime(report.createdAt)}
+                          {formatDateTime(report.createdAt)}
                         </p>
                       </div>
                       <Badge variant={report.status === 'RESOLVED' ? 'secondary' : 'destructive'}>
@@ -635,19 +554,12 @@ export default function UserDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {user.socialLogins && user.socialLogins.length > 0 ? (
-              <div className="space-y-3">
-                {user.socialLogins.map((social: any, idx: number) => (
-                  <div key={idx} className="flex items-center justify-between py-2 border-b last:border-b-0">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline">{social.provider}</Badge>
-                      <span className="text-sm">{social.email}</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      연동일: {formatDateTime(social.connectedAt)}
-                    </span>
-                  </div>
-                ))}
+            {user.socialProvider ? (
+              <div className="flex items-center justify-between py-2">
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline">{user.socialProvider}</Badge>
+                  <span className="text-sm">{user.email}</span>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">연동된 소셜 로그인이 없습니다.</p>

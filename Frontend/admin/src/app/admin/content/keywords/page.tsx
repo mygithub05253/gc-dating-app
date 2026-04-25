@@ -2,12 +2,19 @@
 
 import { useState } from 'react';
 import PageHeader from '@/components/layout/PageHeader';
-import MockPageNotice from '@/components/common/MockPageNotice';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { useAuthStore } from '@/stores/authStore';
+import {
+  useAdminKeywordsList,
+  useCreateAdminKeyword,
+  useUpdateAdminKeyword,
+  useDeleteAdminKeyword,
+  useBulkUpdateKeywordWeight,
+} from '@/hooks/useAdminKeywords';
+import type { KeywordCategory, Keyword } from '@/types/keyword';
 import {
   Plus,
   Edit,
@@ -18,22 +25,11 @@ import {
   EyeOff,
   Users,
   Save,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-type KeywordCategory = 'PERSONALITY' | 'LIFESTYLE' | 'INTEREST' | 'VALUE';
-
-type MockKeyword = {
-  id: number;
-  label: string;
-  category: KeywordCategory;
-  weight: number;
-  displayOrder: number;
-  userCount: number;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
+import { useQueryClient } from '@tanstack/react-query';
 
 const KEYWORD_CATEGORY_LABELS: Record<KeywordCategory, string> = {
   PERSONALITY: '성격',
@@ -50,19 +46,6 @@ const KEYWORD_CATEGORY_COLORS: Record<KeywordCategory, string> = {
 };
 
 const KEYWORD_CATEGORIES: KeywordCategory[] = ['PERSONALITY', 'LIFESTYLE', 'INTEREST', 'VALUE'];
-
-const MOCK_KEYWORDS: MockKeyword[] = [
-  { id: 1, label: '유머러스', category: 'PERSONALITY', weight: 0.8, displayOrder: 1, userCount: 1234, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 2, label: '다정한', category: 'PERSONALITY', weight: 0.9, displayOrder: 2, userCount: 2345, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 3, label: '차분한', category: 'PERSONALITY', weight: 0.7, displayOrder: 3, userCount: 987, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 4, label: '운동을 좋아하는', category: 'LIFESTYLE', weight: 0.6, displayOrder: 1, userCount: 1567, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 5, label: '여행을 좋아하는', category: 'LIFESTYLE', weight: 0.7, displayOrder: 2, userCount: 2100, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 6, label: '음악 감상', category: 'INTEREST', weight: 0.5, displayOrder: 1, userCount: 890, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 7, label: '독서', category: 'INTEREST', weight: 0.6, displayOrder: 2, userCount: 654, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 8, label: '성장 지향', category: 'VALUE', weight: 0.8, displayOrder: 1, userCount: 1800, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 9, label: '가족 중심', category: 'VALUE', weight: 0.7, displayOrder: 2, userCount: 1200, isActive: true, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-03-01T00:00:00' },
-  { id: 10, label: '자유로운', category: 'VALUE', weight: 0.5, displayOrder: 3, userCount: 432, isActive: false, createdAt: '2024-01-01T00:00:00', updatedAt: '2024-02-15T00:00:00' },
-];
 
 interface KeywordFormData {
   label: string;
@@ -82,7 +65,7 @@ const INITIAL_FORM: KeywordFormData = {
 
 export default function KeywordsPage() {
   const { hasPermission } = useAuthStore();
-  const [keywords, setKeywords] = useState<MockKeyword[]>(MOCK_KEYWORDS);
+  const queryClient = useQueryClient();
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | KeywordCategory>('ALL');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -90,9 +73,21 @@ export default function KeywordsPage() {
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [bulkWeights, setBulkWeights] = useState<Record<number, number>>({});
 
-  const displayKeywords = keywords
-    .filter((k) => categoryFilter === 'ALL' || k.category === categoryFilter)
-    .sort((a, b) => a.displayOrder - b.displayOrder);
+  const { data: listData, isLoading, isError } = useAdminKeywordsList({
+    category: categoryFilter === 'ALL' ? undefined : categoryFilter,
+  });
+  const createMutation = useCreateAdminKeyword();
+  const updateMutation = useUpdateAdminKeyword();
+  const deleteMutation = useDeleteAdminKeyword();
+  const bulkWeightMutation = useBulkUpdateKeywordWeight();
+
+  const keywords: Keyword[] = listData?.items ?? [];
+
+  // For stats, load all keywords (no category filter)
+  const { data: allListData } = useAdminKeywordsList({});
+  const allKeywords: Keyword[] = allListData?.items ?? [];
+
+  const displayKeywords = [...keywords].sort((a, b) => a.displayOrder - b.displayOrder);
 
   const openCreate = () => {
     setEditingId(null);
@@ -100,7 +95,7 @@ export default function KeywordsPage() {
     setShowForm(true);
   };
 
-  const openEdit = (keyword: MockKeyword) => {
+  const openEdit = (keyword: Keyword) => {
     setEditingId(keyword.id);
     setForm({
       label: keyword.label,
@@ -121,25 +116,11 @@ export default function KeywordsPage() {
       toast.error('가중치는 0~1 범위로 입력해주세요.');
       return;
     }
-    const now = new Date().toISOString();
 
     if (editingId !== null) {
-      setKeywords((prev) =>
-        prev.map((k) =>
-          k.id === editingId ? { ...k, ...form, updatedAt: now } : k,
-        ),
-      );
-      toast.success('키워드가 수정되었습니다.');
+      updateMutation.mutate({ id: editingId, body: form });
     } else {
-      const newKeyword: MockKeyword = {
-        id: Math.max(0, ...keywords.map((k) => k.id)) + 1,
-        ...form,
-        userCount: 0,
-        createdAt: now,
-        updatedAt: now,
-      };
-      setKeywords((prev) => [...prev, newKeyword]);
-      toast.success('키워드가 등록되었습니다.');
+      createMutation.mutate(form);
     }
     setShowForm(false);
     setEditingId(null);
@@ -148,21 +129,19 @@ export default function KeywordsPage() {
 
   const handleDelete = (id: number) => {
     if (!confirm('이 키워드를 삭제하시겠습니까?')) return;
-    setKeywords((prev) => prev.filter((k) => k.id !== id));
-    toast.success('키워드가 삭제되었습니다.');
+    deleteMutation.mutate(id);
   };
 
-  const handleToggleActive = (id: number) => {
-    setKeywords((prev) =>
-      prev.map((k) => (k.id === id ? { ...k, isActive: !k.isActive, updatedAt: new Date().toISOString() } : k)),
-    );
-    const target = keywords.find((k) => k.id === id);
-    toast.success(target?.isActive ? '키워드가 비활성화되었습니다.' : '키워드가 활성화되었습니다.');
+  const handleToggleActive = (keyword: Keyword) => {
+    updateMutation.mutate({
+      id: keyword.id,
+      body: { isActive: !keyword.isActive },
+    });
   };
 
   const openBulkEdit = () => {
     const initial: Record<number, number> = {};
-    keywords.forEach((k) => {
+    allKeywords.forEach((k) => {
       initial[k.id] = k.weight;
     });
     setBulkWeights(initial);
@@ -170,20 +149,42 @@ export default function KeywordsPage() {
   };
 
   const handleBulkSave = () => {
-    const now = new Date().toISOString();
-    setKeywords((prev) =>
-      prev.map((k) => ({
-        ...k,
-        weight: bulkWeights[k.id] ?? k.weight,
-        updatedAt: now,
-      })),
-    );
+    const updates = Object.entries(bulkWeights).map(([id, weight]) => ({
+      id: Number(id),
+      weight,
+    }));
+    bulkWeightMutation.mutate({ updates });
     setShowBulkEdit(false);
-    toast.success('키워드 가중치가 일괄 수정되었습니다.');
   };
 
-  const activeCount = keywords.filter((k) => k.isActive).length;
-  const totalUserCount = keywords.reduce((sum, k) => sum + k.userCount, 0);
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-keywords-list'] });
+    toast.success('키워드 목록을 새로고침했습니다.');
+  };
+
+  const activeCount = allKeywords.filter((k) => k.isActive).length;
+  const totalUserCount = allKeywords.reduce((sum, k) => sum + k.userCount, 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">키워드 목록을 불러오는 중...</span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-red-400" />
+        <p className="mt-2">키워드 목록을 불러오는데 실패했습니다.</p>
+        <Button variant="outline" className="mt-4" onClick={handleRefresh}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -193,7 +194,7 @@ export default function KeywordsPage() {
         actions={
           hasPermission('ADMIN') && (
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => toast.success('키워드 목록을 새로고침했습니다.')}>
+              <Button variant="outline" onClick={handleRefresh}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 새로고침
               </Button>
@@ -210,8 +211,6 @@ export default function KeywordsPage() {
         }
       />
 
-      <MockPageNotice message="키워드 도메인 백엔드 API 준비 중입니다. 현재는 Mock 데이터로 화면 흐름만 검증됩니다." />
-
       {/* 통계 */}
       <div className="mb-6 grid gap-4 md:grid-cols-4">
         <Card>
@@ -220,7 +219,7 @@ export default function KeywordsPage() {
               <Tag className="h-5 w-5 text-blue-500" />
               <span className="text-sm text-muted-foreground">전체 키워드</span>
             </div>
-            <div className="mt-2 text-2xl font-bold">{keywords.length}</div>
+            <div className="mt-2 text-2xl font-bold">{allKeywords.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -328,7 +327,10 @@ export default function KeywordsPage() {
               >
                 취소
               </Button>
-              <Button onClick={handleSave}>
+              <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+                {(createMutation.isPending || updateMutation.isPending) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 {editingId !== null ? '수정 완료' : '등록'}
               </Button>
             </div>
@@ -344,7 +346,7 @@ export default function KeywordsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-2 md:grid-cols-2">
-              {keywords.map((k) => (
+              {allKeywords.map((k) => (
                 <div key={k.id} className="flex items-center gap-3 rounded border p-2">
                   <Badge className={KEYWORD_CATEGORY_COLORS[k.category]}>
                     {KEYWORD_CATEGORY_LABELS[k.category]}
@@ -368,7 +370,10 @@ export default function KeywordsPage() {
               <Button variant="outline" onClick={() => setShowBulkEdit(false)}>
                 취소
               </Button>
-              <Button onClick={handleBulkSave}>
+              <Button onClick={handleBulkSave} disabled={bulkWeightMutation.isPending}>
+                {bulkWeightMutation.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
                 <Save className="mr-2 h-4 w-4" />
                 일괄 저장
               </Button>
@@ -391,7 +396,7 @@ export default function KeywordsPage() {
                   : 'bg-muted text-muted-foreground hover:bg-muted/70'
               }`}
             >
-              전체 ({keywords.length})
+              전체 ({allKeywords.length})
             </button>
             {KEYWORD_CATEGORIES.map((cat) => (
               <button
@@ -404,7 +409,7 @@ export default function KeywordsPage() {
                     : 'bg-muted text-muted-foreground hover:bg-muted/70'
                 }`}
               >
-                {KEYWORD_CATEGORY_LABELS[cat]} ({keywords.filter((k) => k.category === cat).length})
+                {KEYWORD_CATEGORY_LABELS[cat]} ({allKeywords.filter((k) => k.category === cat).length})
               </button>
             ))}
           </div>
@@ -456,7 +461,7 @@ export default function KeywordsPage() {
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => handleToggleActive(keyword.id)}
+                          onClick={() => handleToggleActive(keyword)}
                           className="rounded p-1.5 text-muted-foreground hover:bg-muted"
                           title={keyword.isActive ? '비활성화' : '활성화'}
                         >

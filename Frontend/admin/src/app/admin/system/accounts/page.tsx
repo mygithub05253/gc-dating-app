@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { adminsApi } from '@/lib/api/admins';
 import PageHeader from '@/components/layout/PageHeader';
 import DataTable, { type DataTableColumn } from '@/components/common/DataTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,62 +13,10 @@ import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/stores/authStore';
 import { formatDateTime } from '@/lib/utils/format';
 import { ADMIN_ROLE_LABELS } from '@/lib/constants';
-import { UserPlus, Shield, Trash2, Edit, Key } from 'lucide-react';
+import { UserPlus, Shield, Trash2, Edit, Key, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// Mock 관리자 계정 데이터
-const MOCK_ADMINS = [
-  {
-    id: 1,
-    email: 'super@ember.com',
-    name: '최고관리자',
-    role: 'SUPER_ADMIN',
-    isActive: true,
-    lastLoginAt: '2024-03-22T09:00:00',
-    createdAt: '2024-01-01T00:00:00',
-    createdBy: 'SYSTEM',
-  },
-  {
-    id: 2,
-    email: 'admin@ember.com',
-    name: '운영관리자',
-    role: 'ADMIN',
-    isActive: true,
-    lastLoginAt: '2024-03-22T10:30:00',
-    createdAt: '2024-01-15T10:00:00',
-    createdBy: 'super@ember.com',
-  },
-  {
-    id: 3,
-    email: 'viewer@ember.com',
-    name: '뷰어계정',
-    role: 'VIEWER',
-    isActive: true,
-    lastLoginAt: '2024-03-21T14:00:00',
-    createdAt: '2024-02-01T09:00:00',
-    createdBy: 'super@ember.com',
-  },
-  {
-    id: 4,
-    email: 'cs@ember.com',
-    name: 'CS팀',
-    role: 'ADMIN',
-    isActive: true,
-    lastLoginAt: '2024-03-20T16:00:00',
-    createdAt: '2024-02-15T11:00:00',
-    createdBy: 'super@ember.com',
-  },
-  {
-    id: 5,
-    email: 'old@ember.com',
-    name: '퇴사자',
-    role: 'ADMIN',
-    isActive: false,
-    lastLoginAt: '2024-02-28T18:00:00',
-    createdAt: '2024-01-20T10:00:00',
-    createdBy: 'super@ember.com',
-  },
-];
+import type { AdminAccount, AdminAccountCreateRequest, AdminAccountUpdateRequest, AdminAccountStatus } from '@/types/admin';
+import type { AdminRole } from '@/types/common';
 
 const ROLE_COLORS: Record<string, string> = {
   SUPER_ADMIN: 'bg-purple-100 text-purple-800',
@@ -76,80 +26,103 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function SystemAccountsPage() {
   const { hasPermission, user } = useAuthStore();
-  const [admins, setAdmins] = useState(MOCK_ADMINS);
+  const queryClient = useQueryClient();
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [newAdmin, setNewAdmin] = useState({
     email: '',
-    name: '',
-    role: 'VIEWER',
+    adminName: '',
+    adminRole: 'VIEWER' as AdminRole,
     password: '',
   });
 
+  // 관리자 목록 조회
+  const { data: pageData, isLoading } = useQuery({
+    queryKey: ['admin-accounts'],
+    queryFn: () => adminsApi.getList({ size: 100 }).then(r => r.data.data),
+  });
+
+  const admins = pageData?.content ?? [];
+
+  // 관리자 생성
+  const createMutation = useMutation({
+    mutationFn: (data: AdminAccountCreateRequest) => adminsApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-accounts'] });
+      setNewAdmin({ email: '', adminName: '', adminRole: 'VIEWER', password: '' });
+      setIsAddingNew(false);
+      toast.success('관리자 계정이 생성되었습니다.');
+    },
+    onError: () => toast.error('관리자 계정 생성에 실패했습니다.'),
+  });
+
+  // 관리자 상태 변경
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: AdminAccountUpdateRequest }) =>
+      adminsApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-accounts'] });
+      toast.success('계정 상태가 변경되었습니다.');
+    },
+    onError: () => toast.error('계정 상태 변경에 실패했습니다.'),
+  });
+
+  // 관리자 삭제
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => adminsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-accounts'] });
+      toast.success('계정이 삭제되었습니다.');
+    },
+    onError: () => toast.error('계정 삭제에 실패했습니다.'),
+  });
+
   const handleAddAdmin = () => {
-    if (!newAdmin.email || !newAdmin.name || !newAdmin.password) {
+    if (!newAdmin.email || !newAdmin.adminName || !newAdmin.password) {
       toast.error('모든 필드를 입력해주세요.');
       return;
     }
-    const newId = Math.max(...admins.map((a) => a.id)) + 1;
-    setAdmins([
-      ...admins,
-      {
-        id: newId,
-        email: newAdmin.email,
-        name: newAdmin.name,
-        role: newAdmin.role,
-        isActive: true,
-        lastLoginAt: '',
-        createdAt: new Date().toISOString(),
-        createdBy: user?.email || 'unknown',
-      },
-    ]);
-    setNewAdmin({ email: '', name: '', role: 'VIEWER', password: '' });
-    setIsAddingNew(false);
-    toast.success('관리자 계정이 생성되었습니다.');
+    createMutation.mutate({
+      email: newAdmin.email,
+      adminName: newAdmin.adminName,
+      adminRole: newAdmin.adminRole,
+      password: newAdmin.password,
+    });
   };
 
-  const handleToggleActive = (id: number) => {
-    setAdmins(
-      admins.map((admin) =>
-        admin.id === id ? { ...admin, isActive: !admin.isActive } : admin
-      )
-    );
-    toast.success('계정 상태가 변경되었습니다.');
+  const handleToggleActive = (admin: AdminAccount) => {
+    const newStatus: AdminAccountStatus = admin.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    updateMutation.mutate({ id: admin.id, data: { status: newStatus } });
   };
 
   const handleDelete = (id: number) => {
-    setAdmins(admins.filter((admin) => admin.id !== id));
-    toast.success('계정이 삭제되었습니다.');
+    deleteMutation.mutate(id);
   };
 
   const handleResetPassword = (email: string) => {
     toast.success(`${email}로 비밀번호 재설정 링크가 전송되었습니다.`);
   };
 
-  type AdminRow = (typeof admins)[number];
-
-  const columns: DataTableColumn<AdminRow>[] = useMemo(
+  const columns: DataTableColumn<AdminAccount>[] = useMemo(
     () => [
       {
         key: 'email',
         header: '이메일',
         cell: (admin) => <span className="font-medium">{admin.email}</span>,
       },
-      { key: 'name', header: '이름', cell: (admin) => admin.name },
+      { key: 'adminName', header: '이름', cell: (admin) => admin.adminName },
       {
-        key: 'role',
+        key: 'adminRole',
         header: '역할',
         cell: (admin) => (
-          <Badge className={ROLE_COLORS[admin.role]}>{ADMIN_ROLE_LABELS[admin.role]}</Badge>
+          <Badge className={ROLE_COLORS[admin.adminRole]}>{ADMIN_ROLE_LABELS[admin.adminRole]}</Badge>
         ),
       },
       {
         key: 'status',
         header: '상태',
         cell: (admin) => (
-          <Badge variant={admin.isActive ? 'default' : 'secondary'}>
-            {admin.isActive ? '활성' : '비활성'}
+          <Badge variant={admin.status === 'ACTIVE' ? 'default' : 'secondary'}>
+            {admin.status === 'ACTIVE' ? '활성' : '비활성'}
           </Badge>
         ),
       },
@@ -185,12 +158,12 @@ export default function SystemAccountsPage() {
             <Button
               variant="ghost"
               size="xs"
-              onClick={() => handleToggleActive(admin.id)}
-              title={admin.isActive ? '비활성화' : '활성화'}
+              onClick={() => handleToggleActive(admin)}
+              title={admin.status === 'ACTIVE' ? '비활성화' : '활성화'}
             >
               <Edit className="h-4 w-4" />
             </Button>
-            {admin.role !== 'SUPER_ADMIN' && (
+            {admin.adminRole !== 'SUPER_ADMIN' && (
               <Button
                 variant="ghost"
                 size="xs"
@@ -208,7 +181,7 @@ export default function SystemAccountsPage() {
     [admins],
   );
 
-  const activeCount = admins.filter((a) => a.isActive).length;
+  const activeCount = admins.filter((a) => a.status === 'ACTIVE').length;
 
   if (!hasPermission('SUPER_ADMIN')) {
     return (
@@ -220,6 +193,14 @@ export default function SystemAccountsPage() {
             이 페이지는 SUPER_ADMIN 권한이 필요합니다.
           </p>
         </Card>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -260,7 +241,7 @@ export default function SystemAccountsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold">
-              {admins.filter((a) => a.role === 'SUPER_ADMIN').length}
+              {admins.filter((a) => a.adminRole === 'SUPER_ADMIN').length}
             </div>
             <p className="text-sm text-muted-foreground">슈퍼 관리자</p>
           </CardContent>
@@ -290,8 +271,8 @@ export default function SystemAccountsPage() {
                 <Input
                   id="name"
                   placeholder="홍길동"
-                  value={newAdmin.name}
-                  onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })}
+                  value={newAdmin.adminName}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, adminName: e.target.value })}
                 />
               </div>
               <div>
@@ -299,8 +280,8 @@ export default function SystemAccountsPage() {
                 <select
                   id="role"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  value={newAdmin.role}
-                  onChange={(e) => setNewAdmin({ ...newAdmin, role: e.target.value })}
+                  value={newAdmin.adminRole}
+                  onChange={(e) => setNewAdmin({ ...newAdmin, adminRole: e.target.value as AdminRole })}
                 >
                   <option value="VIEWER">뷰어</option>
                   <option value="ADMIN">관리자</option>
@@ -319,7 +300,9 @@ export default function SystemAccountsPage() {
               </div>
             </div>
             <div className="mt-4 flex gap-2">
-              <Button onClick={handleAddAdmin}>생성</Button>
+              <Button onClick={handleAddAdmin} disabled={createMutation.isPending}>
+                {createMutation.isPending ? '생성 중...' : '생성'}
+              </Button>
               <Button variant="outline" onClick={() => setIsAddingNew(false)}>
                 취소
               </Button>
@@ -339,7 +322,7 @@ export default function SystemAccountsPage() {
             data={admins}
             rowKey={(admin) => admin.id}
             wrapInCard={false}
-            rowClassName={(admin) => (!admin.isActive ? 'opacity-50' : undefined)}
+            rowClassName={(admin) => (admin.status !== 'ACTIVE' ? 'opacity-50' : undefined)}
           />
         </CardContent>
       </Card>

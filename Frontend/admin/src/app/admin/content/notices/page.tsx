@@ -16,9 +16,13 @@ import {
 import type {
   NoticeCategory,
   NoticeStatus,
-  NoticePriority,
   NoticeTargetAudience,
+  Notice,
 } from '@/types/content';
+import {
+  useAdminNoticesList,
+  useChangeAdminNoticeStatus,
+} from '@/hooks/useAdminNotices';
 import {
   RefreshCw,
   Plus,
@@ -35,8 +39,11 @@ import {
   Flame,
   Crown,
   Moon,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 // v2.1 신규: 타겟 오디언스 라벨 / 색상 / 아이콘 (ERD v2.1 notices.target_audience Enum 5종)
 const TARGET_AUDIENCE_LABELS: Record<NoticeTargetAudience, string> = {
@@ -66,137 +73,6 @@ const TARGET_AUDIENCE_ICONS: Record<NoticeTargetAudience, React.ReactNode> = {
 // URGENT/MAINTENANCE 카테고리는 자동으로 ALL로 보정 (관리자 기능명세서 v2.1)
 const FORCE_ALL_CATEGORIES: NoticeCategory[] = ['URGENT', 'MAINTENANCE'];
 
-type MockNotice = {
-  id: number;
-  title: string;
-  content: string;
-  category: NoticeCategory;
-  priority: NoticePriority;
-  isPinned: boolean;
-  status: NoticeStatus;
-  publishedAt: string | null;
-  createdAt: string;
-  createdBy: string;
-  viewCount: number;
-  targetAudience: NoticeTargetAudience;
-};
-
-// Mock 공지사항 데이터 (ERD v2.1: targetAudience 5종 샘플 포함)
-const MOCK_NOTICES: MockNotice[] = [
-  {
-    id: 1,
-    title: '서비스 이용약관 변경 안내',
-    content: '안녕하세요, Ember입니다.\n\n2024년 3월 1일부터 서비스 이용약관이 변경됩니다. 주요 변경사항은 다음과 같습니다...',
-    category: 'TERMS_CHANGE',
-    priority: 'HIGH',
-    isPinned: true,
-    status: 'PUBLISHED',
-    publishedAt: '2024-03-20T09:00:00',
-    createdAt: '2024-03-19T14:00:00',
-    createdBy: '김관리',
-    viewCount: 12456,
-    targetAudience: 'ALL',
-  },
-  {
-    id: 2,
-    title: '수요일 특별 랜덤 주제 이벤트',
-    content: '매주 수요일에 특별한 랜덤 주제가 제공됩니다! 이번 주 주제는...',
-    category: 'GENERAL',
-    priority: 'NORMAL',
-    isPinned: true,
-    status: 'PUBLISHED',
-    publishedAt: '2024-03-20T00:00:00',
-    createdAt: '2024-03-19T18:00:00',
-    createdBy: '이운영',
-    viewCount: 8934,
-    targetAudience: 'ACTIVE_USER',
-  },
-  {
-    id: 3,
-    title: '시스템 점검 안내 (3/25 02:00~04:00)',
-    content: '서비스 안정화를 위한 시스템 점검이 예정되어 있습니다.',
-    category: 'MAINTENANCE',
-    priority: 'HIGH',
-    isPinned: false,
-    status: 'PUBLISHED',
-    publishedAt: '2024-03-22T10:00:00',
-    createdAt: '2024-03-22T09:30:00',
-    createdBy: '김관리',
-    viewCount: 3456,
-    targetAudience: 'ALL',
-  },
-  {
-    id: 4,
-    title: '새로 가입하신 회원님께 드리는 안내',
-    content: 'Ember에 오신 걸 환영합니다! 교환일기를 처음 시작하는 분들을 위한 팁을 소개합니다.',
-    category: 'GENERAL',
-    priority: 'NORMAL',
-    isPinned: false,
-    status: 'PUBLISHED',
-    publishedAt: '2024-03-18T12:00:00',
-    createdAt: '2024-03-18T10:00:00',
-    createdBy: '이운영',
-    viewCount: 6789,
-    targetAudience: 'NEW_USER',
-  },
-  {
-    id: 5,
-    title: '[프리미엄 전용] 봄맞이 혜택 안내',
-    content: '프리미엄 회원님께만 드리는 특별한 혜택이 준비되었습니다!',
-    category: 'GENERAL',
-    priority: 'NORMAL',
-    isPinned: false,
-    status: 'DRAFT',
-    publishedAt: null,
-    createdAt: '2024-03-23T11:00:00',
-    createdBy: '박신입',
-    viewCount: 0,
-    targetAudience: 'PREMIUM',
-  },
-  {
-    id: 6,
-    title: '오랜만입니다! Ember로 돌아오세요',
-    content: '한동안 뵙지 못한 회원님께 특별 이벤트를 준비했습니다.',
-    category: 'GENERAL',
-    priority: 'NORMAL',
-    isPinned: false,
-    status: 'DRAFT',
-    publishedAt: '2024-03-25T09:00:00',
-    createdAt: '2024-03-23T10:00:00',
-    createdBy: '김관리',
-    viewCount: 0,
-    targetAudience: 'DORMANT',
-  },
-  {
-    id: 7,
-    title: '[긴급] 임시 점검 안내',
-    content: 'AI 모델 업데이트로 인해 23:00~23:30 일시 서비스가 중단될 수 있습니다.',
-    category: 'URGENT',
-    priority: 'HIGH',
-    isPinned: true,
-    status: 'PUBLISHED',
-    publishedAt: '2024-03-23T22:30:00',
-    createdAt: '2024-03-23T22:00:00',
-    createdBy: '김관리',
-    viewCount: 9876,
-    targetAudience: 'ALL',
-  },
-  {
-    id: 8,
-    title: '공지 (숨김 처리)',
-    content: '잘못 게시되어 숨김 처리된 공지입니다.',
-    category: 'GENERAL',
-    priority: 'NORMAL',
-    isPinned: false,
-    status: 'HIDDEN',
-    publishedAt: '2024-03-15T10:00:00',
-    createdAt: '2024-03-15T09:30:00',
-    createdBy: '박신입',
-    viewCount: 234,
-    targetAudience: 'ALL',
-  },
-];
-
 const CATEGORY_ICONS: Record<NoticeCategory, React.ReactNode> = {
   GENERAL: <Info className="h-4 w-4" />,
   MAINTENANCE: <Bell className="h-4 w-4" />,
@@ -205,12 +81,23 @@ const CATEGORY_ICONS: Record<NoticeCategory, React.ReactNode> = {
 };
 
 export default function NoticesManagementPage() {
+  const queryClient = useQueryClient();
   const [keyword, setKeyword] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [audienceFilter, setAudienceFilter] = useState<string>('ALL_AUDIENCE'); // v2.1 신규
+  const [audienceFilter, setAudienceFilter] = useState<string>('ALL_AUDIENCE');
+
+  const { data: pageData, isLoading, isError } = useAdminNoticesList({
+    category: categoryFilter === 'ALL' ? undefined : (categoryFilter as NoticeCategory),
+    status: statusFilter === 'ALL' ? undefined : (statusFilter as NoticeStatus),
+    keyword: keyword || undefined,
+  });
+  const changeStatusMutation = useChangeAdminNoticeStatus();
+
+  const notices: Notice[] = pageData?.content ?? [];
 
   const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['admin-notices-list'] });
     toast.success('공지사항 목록을 새로고침했습니다.');
   };
 
@@ -223,23 +110,45 @@ export default function NoticesManagementPage() {
   };
 
   const handleDelete = (noticeId: number) => {
-    toast.success(`공지사항 #${noticeId}을 삭제했습니다.`);
+    changeStatusMutation.mutate({ id: noticeId, status: 'HIDDEN' });
   };
 
   const handleTogglePin = (noticeId: number) => {
     toast.success(`공지사항 #${noticeId}의 고정 상태를 변경했습니다.`);
   };
 
-  // Filter notices
-  const filteredNotices = MOCK_NOTICES.filter((notice) => {
-    const matchesKeyword =
-      !keyword || notice.title.includes(keyword) || notice.content.includes(keyword);
-    const matchesCategory = categoryFilter === 'ALL' || notice.category === categoryFilter;
-    const matchesStatus = statusFilter === 'ALL' || notice.status === statusFilter;
+  // Filter by audience client-side (API doesn't support audience param)
+  const filteredNotices = notices.filter((notice) => {
     const matchesAudience =
       audienceFilter === 'ALL_AUDIENCE' || notice.targetAudience === audienceFilter;
-    return matchesKeyword && matchesCategory && matchesStatus && matchesAudience;
+    return matchesAudience;
   });
+
+  // Compute stats from all loaded notices
+  const publishedCount = notices.filter((n) => n.status === 'PUBLISHED').length;
+  const draftCount = notices.filter((n) => n.status === 'DRAFT').length;
+  const hiddenCount = notices.filter((n) => n.status === 'HIDDEN').length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">공지사항 목록을 불러오는 중...</span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+        <AlertCircle className="h-8 w-8 text-red-400" />
+        <p className="mt-2">공지사항 목록을 불러오는데 실패했습니다.</p>
+        <Button variant="outline" className="mt-4" onClick={handleRefresh}>
+          다시 시도
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -265,31 +174,25 @@ export default function NoticesManagementPage() {
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">전체 공지</div>
-            <div className="mt-1 text-2xl font-bold">{MOCK_NOTICES.length}</div>
+            <div className="mt-1 text-2xl font-bold">{notices.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">게시중</div>
-            <div className="mt-1 text-2xl font-bold text-green-600">
-              {MOCK_NOTICES.filter((n) => n.status === 'PUBLISHED').length}
-            </div>
+            <div className="mt-1 text-2xl font-bold text-green-600">{publishedCount}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">초안</div>
-            <div className="mt-1 text-2xl font-bold text-gray-500">
-              {MOCK_NOTICES.filter((n) => n.status === 'DRAFT').length}
-            </div>
+            <div className="mt-1 text-2xl font-bold text-gray-500">{draftCount}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">숨김</div>
-            <div className="mt-1 text-2xl font-bold text-zinc-500">
-              {MOCK_NOTICES.filter((n) => n.status === 'HIDDEN').length}
-            </div>
+            <div className="mt-1 text-2xl font-bold text-zinc-500">{hiddenCount}</div>
           </CardContent>
         </Card>
       </div>
