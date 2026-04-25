@@ -56,13 +56,13 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
      * 정렬은 Pageable 의 Sort 로 전달하지 않고 JPQL 고정 (priority DESC, slaDeadline ASC).
      * sort 파라미터 분기는 Service 에서 별도 쿼리로 처리해도 되지만, 현 Phase 는 priority 고정.
      */
-    @Query("""
+    @Query(value = """
             SELECT r FROM Report r
             LEFT JOIN FETCH r.assignedTo assigned
             LEFT JOIN FETCH r.resolvedBy resolver
             WHERE (:status IS NULL OR r.status = :status)
               AND (:reason IS NULL OR r.reason = :reason)
-              AND (:minPriority IS NULL OR r.priorityScore >= :minPriority)
+              AND (CAST(:minPriority AS integer) IS NULL OR r.priorityScore >= :minPriority)
               AND (
                     :assigneeFilter = 'ANY'
                  OR (:assigneeFilter = 'UNASSIGNED' AND r.assignedTo IS NULL)
@@ -71,6 +71,19 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
               )
               AND (:slaOverdue = FALSE OR (r.slaDeadline IS NOT NULL AND r.slaDeadline < :now))
             ORDER BY r.priorityScore DESC, r.slaDeadline ASC, r.id DESC
+            """,
+            countQuery = """
+            SELECT COUNT(r) FROM Report r
+            WHERE (:status IS NULL OR r.status = :status)
+              AND (:reason IS NULL OR r.reason = :reason)
+              AND (CAST(:minPriority AS integer) IS NULL OR r.priorityScore >= :minPriority)
+              AND (
+                    :assigneeFilter = 'ANY'
+                 OR (:assigneeFilter = 'UNASSIGNED' AND r.assignedTo IS NULL)
+                 OR (:assigneeFilter = 'ME' AND r.assignedTo.id = :assigneeId)
+                 OR (:assigneeFilter = 'SPECIFIC' AND r.assignedTo.id = :assigneeId)
+              )
+              AND (:slaOverdue = FALSE OR (r.slaDeadline IS NOT NULL AND r.slaDeadline < :now))
             """)
     Page<Report> searchReports(
             @Param("status") Report.ReportStatus status,
