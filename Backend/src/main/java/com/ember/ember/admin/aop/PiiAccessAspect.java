@@ -17,6 +17,8 @@ import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.core.DefaultParameterNameDiscoverer;
+import org.springframework.core.ParameterNameDiscoverer;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -44,6 +46,7 @@ public class PiiAccessAspect {
     private final AdminPiiAccessLogRepository piiAccessLogRepository;
     private final AdminAccountRepository adminAccountRepository;
     private final UserRepository userRepository;
+    private final ParameterNameDiscoverer paramDiscoverer = new DefaultParameterNameDiscoverer();
 
     /**
      * {@code @PiiAccess} 메서드 실행 전 PII 접근 로그 저장.
@@ -99,8 +102,9 @@ public class PiiAccessAspect {
     private Long extractTargetId(JoinPoint joinPoint, String paramName) {
         if (paramName == null || paramName.isBlank()) return null;
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-        String[] names = signature.getParameterNames();
+        String[] names = paramDiscoverer.getParameterNames(signature.getMethod());
         Object[] args = joinPoint.getArgs();
+        if (names == null) names = signature.getParameterNames();
         if (names == null) return null;
         for (int i = 0; i < names.length; i++) {
             if (paramName.equals(names[i]) && args[i] instanceof Number n) {
