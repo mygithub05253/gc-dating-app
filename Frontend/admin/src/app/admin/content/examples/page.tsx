@@ -68,7 +68,10 @@ export default function ExampleDiariesPage() {
   // 목록 조회 (전체 → 클라이언트 사이드 필터)
   const listQuery = useQuery({
     queryKey: ['example-diaries'],
-    queryFn: () => exampleDiariesApi.getList().then((res) => res.data.data),
+    queryFn: () => exampleDiariesApi.getList().then((res) => {
+      const d = res.data.data as any;
+      return Array.isArray(d) ? d : d.content ?? [];
+    }),
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['example-diaries'] });
@@ -109,8 +112,8 @@ export default function ExampleDiariesPage() {
     toast('등록 모달은 다음 PR에서 구현됩니다.', { icon: '🚧' });
   };
 
-  const allDiaries = listQuery.data ?? [];
-  const filteredDiaries = allDiaries.filter((d) => {
+  const allDiaries: ExampleDiaryResponse[] = listQuery.data ?? [];
+  const filteredDiaries = allDiaries.filter((d: ExampleDiaryResponse) => {
     const matchesKeyword =
       !keyword || d.title.includes(keyword) || d.content.includes(keyword);
     const matchesCategory = categoryFilter === 'ALL' || d.category === categoryFilter;
