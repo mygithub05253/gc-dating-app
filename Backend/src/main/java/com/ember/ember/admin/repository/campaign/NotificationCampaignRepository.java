@@ -18,15 +18,15 @@ public interface NotificationCampaignRepository extends JpaRepository<Notificati
      */
     @Query(value = "SELECT c FROM NotificationCampaign c " +
                    "WHERE (:status IS NULL OR c.status = :status) " +
-                   "  AND (:createdBy IS NULL OR c.createdBy = :createdBy) " +
-                   "  AND (:startDate IS NULL OR c.createdAt >= :startDate) " +
-                   "  AND (:endDate IS NULL OR c.createdAt < :endDate) " +
+                   "  AND (CAST(:createdBy AS long) IS NULL OR c.createdBy = :createdBy) " +
+                   "  AND (CAST(:startDate AS timestamp) IS NULL OR c.createdAt >= :startDate) " +
+                   "  AND (CAST(:endDate AS timestamp) IS NULL OR c.createdAt < :endDate) " +
                    "ORDER BY c.createdAt DESC",
             countQuery = "SELECT COUNT(c) FROM NotificationCampaign c " +
                          "WHERE (:status IS NULL OR c.status = :status) " +
-                         "  AND (:createdBy IS NULL OR c.createdBy = :createdBy) " +
-                         "  AND (:startDate IS NULL OR c.createdAt >= :startDate) " +
-                         "  AND (:endDate IS NULL OR c.createdAt < :endDate)")
+                         "  AND (CAST(:createdBy AS long) IS NULL OR c.createdBy = :createdBy) " +
+                         "  AND (CAST(:startDate AS timestamp) IS NULL OR c.createdAt >= :startDate) " +
+                         "  AND (CAST(:endDate AS timestamp) IS NULL OR c.createdAt < :endDate)")
     Page<NotificationCampaign> searchWithFilter(@Param("status") NotificationCampaign.CampaignStatus status,
                                                 @Param("createdBy") Long createdBy,
                                                 @Param("startDate") LocalDateTime startDate,

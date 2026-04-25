@@ -22,17 +22,17 @@ public interface AdminNotificationRepository extends JpaRepository<AdminNotifica
                    "WHERE (:notificationType IS NULL OR n.notificationType = :notificationType) " +
                    "  AND (:category IS NULL OR n.category = :category) " +
                    "  AND (:status IS NULL OR n.status = :status) " +
-                   "  AND (:assignedTo IS NULL OR n.assignedTo = :assignedTo) " +
-                   "  AND (:startDate IS NULL OR n.createdAt >= :startDate) " +
-                   "  AND (:endDate IS NULL OR n.createdAt < :endDate) " +
+                   "  AND (CAST(:assignedTo AS long) IS NULL OR n.assignedTo = :assignedTo) " +
+                   "  AND (CAST(:startDate AS timestamp) IS NULL OR n.createdAt >= :startDate) " +
+                   "  AND (CAST(:endDate AS timestamp) IS NULL OR n.createdAt < :endDate) " +
                    "ORDER BY n.createdAt DESC",
             countQuery = "SELECT COUNT(n) FROM AdminNotification n " +
                          "WHERE (:notificationType IS NULL OR n.notificationType = :notificationType) " +
                          "  AND (:category IS NULL OR n.category = :category) " +
                          "  AND (:status IS NULL OR n.status = :status) " +
-                         "  AND (:assignedTo IS NULL OR n.assignedTo = :assignedTo) " +
-                         "  AND (:startDate IS NULL OR n.createdAt >= :startDate) " +
-                         "  AND (:endDate IS NULL OR n.createdAt < :endDate)")
+                         "  AND (CAST(:assignedTo AS long) IS NULL OR n.assignedTo = :assignedTo) " +
+                         "  AND (CAST(:startDate AS timestamp) IS NULL OR n.createdAt >= :startDate) " +
+                         "  AND (CAST(:endDate AS timestamp) IS NULL OR n.createdAt < :endDate)")
     Page<AdminNotification> searchWithFilter(@Param("notificationType") AdminNotification.NotificationType notificationType,
                                              @Param("category") String category,
                                              @Param("status") AdminNotification.Status status,

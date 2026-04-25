@@ -35,7 +35,7 @@ public interface BannedWordRepository extends JpaRepository<BannedWord, Long> {
             WHERE (:category IS NULL OR b.category = :category)
               AND (:matchMode IS NULL OR b.matchMode = :matchMode)
               AND (:isActive IS NULL OR b.isActive = :isActive)
-              AND (:q IS NULL OR LOWER(b.word) LIKE LOWER(CONCAT('%', :q, '%')))
+              AND (:q IS NULL OR LOWER(b.word) LIKE LOWER(CONCAT('%', CAST(:q AS string), '%')))
             """)
     Page<BannedWord> search(@Param("category") BannedWord.BannedWordCategory category,
                             @Param("matchMode") BannedWord.MatchMode matchMode,
