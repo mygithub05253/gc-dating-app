@@ -62,4 +62,18 @@ public class Inquiry extends BaseEntity {
         inquiry.status = InquiryStatus.OPEN;
         return inquiry;
     }
+
+    /** 관리자 답변 등록 */
+    public void reply(String answer, AdminAccount admin) {
+        this.answer = answer;
+        this.answeredBy = admin;
+        this.answeredAt = LocalDateTime.now();
+        this.status = InquiryStatus.RESOLVED;
+    }
+
+    /** 문의 종료 처리 */
+    public void close() {
+        this.closedAt = LocalDateTime.now();
+        this.status = InquiryStatus.CLOSED;
+    }
 }

@@ -233,6 +233,18 @@ export const SANCTION_TYPE_LABELS: Record<string, string> = {
   BANNED: '영구 정지',
 };
 
+export const APPEAL_DECISION_LABELS: Record<string, string> = {
+  MAINTAIN: '유지',
+  REDUCE: '감경',
+  RELEASE: '해제',
+};
+
+export const APPEAL_DECISION_COLORS: Record<string, string> = {
+  MAINTAIN: SOFT.muted,
+  REDUCE: SOFT.warning,
+  RELEASE: SOFT.success,
+};
+
 // ────────────────────────────────────────────────────────
 // FAQ (관리자 API 통합명세서 v2.0 §22)
 // ────────────────────────────────────────────────────────

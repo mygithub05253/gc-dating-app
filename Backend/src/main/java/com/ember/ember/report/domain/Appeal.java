@@ -64,4 +64,13 @@ public class Appeal extends BaseEntity {
         appeal.status = AppealStatus.PENDING;
         return appeal;
     }
+
+    /** 관리자 결정 처리 */
+    public void decide(AppealDecision decision, String decisionReason, AdminAccount admin) {
+        this.decision = decision;
+        this.decisionReason = decisionReason;
+        this.decidedBy = admin;
+        this.decidedAt = LocalDateTime.now();
+        this.status = AppealStatus.DECIDED;
+    }
 }

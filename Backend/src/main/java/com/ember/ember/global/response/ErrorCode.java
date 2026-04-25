@@ -193,7 +193,13 @@ public enum ErrorCode {
     // §24 이상형 키워드 관리
     ADM_KEYWORD_NOT_FOUND("ADM038", HttpStatus.NOT_FOUND, "존재하지 않는 키워드입니다."),
     ADM_KEYWORD_LABEL_DUPLICATE("ADM039", HttpStatus.CONFLICT, "이미 사용 중인 키워드 라벨입니다."),
-    ADM_KEYWORD_MIN_CATEGORY("ADM040", HttpStatus.BAD_REQUEST, "카테고리별 최소 3개의 키워드가 필요합니다.");
+    ADM_KEYWORD_MIN_CATEGORY("ADM040", HttpStatus.BAD_REQUEST, "카테고리별 최소 3개의 키워드가 필요합니다."),
+
+    // §17 고객지원 관리
+    ADM_INQUIRY_NOT_FOUND("ADM044", HttpStatus.NOT_FOUND, "문의를 찾을 수 없습니다."),
+    ADM_INQUIRY_ALREADY_RESOLVED("ADM045", HttpStatus.BAD_REQUEST, "이미 답변된 문의입니다."),
+    ADM_APPEAL_NOT_FOUND("ADM046", HttpStatus.NOT_FOUND, "이의신청을 찾을 수 없습니다."),
+    ADM_APPEAL_ALREADY_DECIDED("ADM047", HttpStatus.BAD_REQUEST, "이미 처리된 이의신청입니다.");
 
     private final String code;
     private final HttpStatus status;
