@@ -38,6 +38,10 @@ public class Notice extends BaseEntity {
     @Column(name = "is_pinned", nullable = false)
     private Boolean isPinned = false;
 
+    @Column(name = "target_audience", nullable = false, length = 15)
+    @Enumerated(EnumType.STRING)
+    private TargetAudience targetAudience = TargetAudience.ALL;
+
     @Column(name = "published_at")
     private LocalDateTime publishedAt;
 
@@ -61,5 +65,47 @@ public class Notice extends BaseEntity {
 
     public enum NoticePriority {
         HIGH, NORMAL
+    }
+
+    public enum TargetAudience {
+        ALL, NEW_USER, ACTIVE_USER, PREMIUM, DORMANT
+    }
+
+    /** 공지사항 생성 팩터리 */
+    public static Notice create(String title, String content, NoticeCategory category,
+                                NoticeStatus status, NoticePriority priority,
+                                Boolean isPinned, TargetAudience targetAudience,
+                                LocalDateTime publishedAt, AdminAccount admin) {
+        Notice n = new Notice();
+        n.title = title;
+        n.content = content;
+        n.category = category;
+        n.status = status != null ? status : NoticeStatus.DRAFT;
+        n.priority = priority != null ? priority : NoticePriority.NORMAL;
+        n.isPinned = isPinned != null ? isPinned : false;
+        n.targetAudience = targetAudience != null ? targetAudience : TargetAudience.ALL;
+        n.publishedAt = publishedAt;
+        n.admin = admin;
+        return n;
+    }
+
+    /** 공지사항 수정 */
+    public void update(String title, String content, NoticeCategory category,
+                       NoticeStatus status, NoticePriority priority,
+                       Boolean isPinned, TargetAudience targetAudience,
+                       LocalDateTime publishedAt) {
+        this.title = title;
+        this.content = content;
+        this.category = category;
+        if (status != null) this.status = status;
+        if (priority != null) this.priority = priority;
+        if (isPinned != null) this.isPinned = isPinned;
+        if (targetAudience != null) this.targetAudience = targetAudience;
+        this.publishedAt = publishedAt;
+    }
+
+    /** 소프트 삭제 */
+    public void softDelete() {
+        this.deletedAt = LocalDateTime.now();
     }
 }

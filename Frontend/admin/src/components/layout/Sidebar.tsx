@@ -106,6 +106,9 @@ const navItems: NavItem[] = [
       { title: '약관 관리', href: '/admin/content/terms' },
       { title: '약관 변경 이력', href: '/admin/content/terms/history', requiredRole: 'SUPER_ADMIN' },
       { title: '공지사항 관리', href: '/admin/content/notices' },
+      { title: '배너 관리', href: '/admin/content/banners' },
+      { title: '튜토리얼 관리', href: '/admin/content/tutorials' },
+      { title: '이상형 키워드 관리', href: '/admin/content/keywords' },
       { title: '금칙어 관리', href: '/admin/content/banned-words' },
       { title: '교환일기 가이드 관리', href: '/admin/content/exchange-guide' },
       { title: '예제 일기 관리', href: '/admin/content/examples' },
@@ -182,6 +185,7 @@ const navItems: NavItem[] = [
     subItems: [
       { title: '문의 관리', href: '/admin/support/inquiries' },
       { title: '이의신청', href: '/admin/support/appeals' },
+      { title: 'FAQ 관리', href: '/admin/support/faqs' },
     ],
   },
   {

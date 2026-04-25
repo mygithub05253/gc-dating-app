@@ -26,4 +26,7 @@ public interface UserIdealKeywordRepository extends JpaRepository<UserIdealKeywo
     @Modifying
     @Query("DELETE FROM UserIdealKeyword uik WHERE uik.user.id = :userId")
     void deleteByUserId(Long userId);
+
+    /** 해당 키워드를 선택한 사용자 수 */
+    long countByKeywordId(Long keywordId);
 }

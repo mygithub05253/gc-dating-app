@@ -48,4 +48,34 @@ public class Banner extends BaseEntity {
     public enum LinkType {
         NOTICE, WEBVIEW, NONE
     }
+
+    /** 배너 생성 팩터리 */
+    public static Banner create(String title, String imageUrl, LinkType linkType,
+                                String linkUrl, Integer priority, Boolean isActive,
+                                LocalDateTime startAt, LocalDateTime endAt) {
+        Banner b = new Banner();
+        b.title = title;
+        b.imageUrl = imageUrl;
+        b.linkType = linkType;
+        b.linkUrl = linkUrl;
+        b.priority = priority != null ? priority : 0;
+        b.isActive = isActive != null ? isActive : true;
+        b.startAt = startAt;
+        b.endAt = endAt;
+        return b;
+    }
+
+    /** 배너 수정 */
+    public void update(String title, String imageUrl, LinkType linkType,
+                       String linkUrl, Integer priority, Boolean isActive,
+                       LocalDateTime startAt, LocalDateTime endAt) {
+        this.title = title;
+        this.imageUrl = imageUrl;
+        this.linkType = linkType;
+        this.linkUrl = linkUrl;
+        if (priority != null) this.priority = priority;
+        if (isActive != null) this.isActive = isActive;
+        this.startAt = startAt;
+        this.endAt = endAt;
+    }
 }

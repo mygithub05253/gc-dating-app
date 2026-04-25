@@ -30,4 +30,36 @@ public class Keyword extends BaseEntity {
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
+
+    /** 키워드 생성 팩터리 */
+    public static Keyword create(String label, String category, BigDecimal weight,
+                                 Integer displayOrder, Boolean isActive) {
+        Keyword k = new Keyword();
+        k.label = label;
+        k.category = category;
+        k.weight = weight != null ? weight : new BigDecimal("0.50");
+        k.displayOrder = displayOrder != null ? displayOrder : 0;
+        k.isActive = isActive != null ? isActive : true;
+        return k;
+    }
+
+    /** 키워드 수정 */
+    public void update(String label, String category, BigDecimal weight,
+                       Integer displayOrder, Boolean isActive) {
+        this.label = label;
+        this.category = category;
+        if (weight != null) this.weight = weight;
+        if (displayOrder != null) this.displayOrder = displayOrder;
+        if (isActive != null) this.isActive = isActive;
+    }
+
+    /** 활성/비활성 토글 */
+    public void toggleActive() {
+        this.isActive = !this.isActive;
+    }
+
+    /** 가중치 변경 */
+    public void updateWeight(BigDecimal weight) {
+        this.weight = weight;
+    }
 }

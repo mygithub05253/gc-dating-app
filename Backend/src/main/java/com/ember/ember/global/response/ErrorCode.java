@@ -174,7 +174,26 @@ public enum ErrorCode {
     ADM_CAMPAIGN_NOT_FOUND("ADM028", HttpStatus.NOT_FOUND, "존재하지 않는 캠페인입니다."),
     ADM_CAMPAIGN_INVALID_STATUS("ADM029", HttpStatus.CONFLICT, "현재 상태에서 수행할 수 없는 작업입니다."),
     ADM_CAMPAIGN_ALREADY_COMPLETED("ADM030", HttpStatus.CONFLICT, "이미 발송 완료된 캠페인입니다. 복사본을 생성하여 발송하세요."),
-    ADM_CAMPAIGN_INVALID_FILTER("ADM031", HttpStatus.BAD_REQUEST, "필터 조건이 올바르지 않습니다.");
+    ADM_CAMPAIGN_INVALID_FILTER("ADM031", HttpStatus.BAD_REQUEST, "필터 조건이 올바르지 않습니다."),
+
+    // §11 공지사항 관리
+    ADM_NOTICE_NOT_FOUND("ADM032", HttpStatus.NOT_FOUND, "존재하지 않는 공지사항입니다."),
+    ADM_NOTICE_PIN_LIMIT("ADM033", HttpStatus.BAD_REQUEST, "고정 공지는 최대 5개까지 가능합니다."),
+
+    // §22 FAQ 관리
+    ADM_FAQ_NOT_FOUND("ADM034", HttpStatus.NOT_FOUND, "존재하지 않는 FAQ입니다."),
+
+    // §12 배너 관리
+    ADM_BANNER_NOT_FOUND("ADM035", HttpStatus.NOT_FOUND, "존재하지 않는 배너입니다."),
+    ADM_BANNER_INVALID_PERIOD("ADM036", HttpStatus.BAD_REQUEST, "시작일은 종료일보다 이전이어야 합니다."),
+
+    // §23 튜토리얼 관리
+    ADM_TUTORIAL_PAGE_NOT_FOUND("ADM037", HttpStatus.NOT_FOUND, "존재하지 않는 튜토리얼 페이지입니다."),
+
+    // §24 이상형 키워드 관리
+    ADM_KEYWORD_NOT_FOUND("ADM038", HttpStatus.NOT_FOUND, "존재하지 않는 키워드입니다."),
+    ADM_KEYWORD_LABEL_DUPLICATE("ADM039", HttpStatus.CONFLICT, "이미 사용 중인 키워드 라벨입니다."),
+    ADM_KEYWORD_MIN_CATEGORY("ADM040", HttpStatus.BAD_REQUEST, "카테고리별 최소 3개의 키워드가 필요합니다.");
 
     private final String code;
     private final HttpStatus status;
