@@ -40,4 +40,7 @@ public interface NotificationCampaignRepository extends JpaRepository<Notificati
     List<NotificationCampaign> findAllByStatusAndScheduledAtLessThanEqual(
             NotificationCampaign.CampaignStatus status,
             LocalDateTime now);
+
+    /** Phase 2-B 발송 워커: SENDING 상태 캠페인 (in-progress) 조회. */
+    List<NotificationCampaign> findAllByStatus(NotificationCampaign.CampaignStatus status);
 }

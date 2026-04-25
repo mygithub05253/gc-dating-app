@@ -148,6 +148,21 @@ public class NotificationCampaign extends BaseEntity {
         this.completedAt = LocalDateTime.now();
     }
 
+    /**
+     * Phase 2-B 워커: SCHEDULED 캠페인의 scheduled_at 도래 시 SENDING 으로 전이.
+     * approve()와 분리한 이유: approve는 관리자 호출 진입점이라 DRAFT만 허용해야 하고,
+     * SCHEDULED → SENDING 전이는 워커 단독 책임이다.
+     */
+    public void startSending() {
+        if (this.status != CampaignStatus.SCHEDULED && this.status != CampaignStatus.SENDING) {
+            throw new IllegalStateException("발송 시작은 SCHEDULED 상태여야 합니다. 현재=" + this.status);
+        }
+        if (this.status == CampaignStatus.SCHEDULED) {
+            this.status = CampaignStatus.SENDING;
+            this.sentAt = LocalDateTime.now();
+        }
+    }
+
     private static String serializeSendTypes(Set<SendType> sendTypes) {
         if (sendTypes == null || sendTypes.isEmpty()) {
             throw new IllegalArgumentException("sendTypes는 1개 이상 지정해야 합니다.");
