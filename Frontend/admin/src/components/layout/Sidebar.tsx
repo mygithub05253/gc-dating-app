@@ -80,6 +80,7 @@ const navItems: NavItem[] = [
     subItems: [
       { title: '회원 목록', href: '/admin/members' },
       { title: '의심 계정 탐지', href: '/admin/members/suspicious' },
+      { title: '소셜 로그인 이슈', href: '/admin/members/social-auth-issues', requiredRole: 'ADMIN' },
     ],
   },
   {
