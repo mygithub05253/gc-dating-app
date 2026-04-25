@@ -38,6 +38,8 @@ dependencies:
   kakao_flutter_sdk_user: ^1.9.7
   stomp_dart_client: ^2.0.0
   web_socket_channel: ^3.0.2
+  firebase_core: ^3.13.0
+  firebase_messaging: ^15.2.4
 
 dev_dependencies:
   flutter_test:

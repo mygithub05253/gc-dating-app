@@ -2,9 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:convert';
 
-void main() {
+// 백그라운드 메시지 핸들러 (top-level 함수여야 함)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint('[FCM 백그라운드] ${message.notification?.title}: ${message.notification?.body}');
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   KakaoSdk.init(nativeAppKey: '033bc5c71a42c748495bf1ec7b0ef77e');
   runApp(const EmberTestApp());
 }
@@ -15,6 +27,7 @@ class EmberTestApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: AppState().navigatorKey,
       title: 'Ember Test',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -34,9 +47,6 @@ class AppState {
   factory AppState() => _instance;
   AppState._();
 
-  // 배포 서버: https://ember-app.duckdns.org
-  // 에뮬레이터 로컬: http://10.0.2.2:8080
-  // 폰+에뮬 동시: PC 로컬 IP (http://192.168.35.32:8080)
   final String baseUrl = 'https://ember-app.duckdns.org';
   final Dio dio = Dio();
 
@@ -60,6 +70,54 @@ class AppState {
     }
     return '$e';
   }
+
+  // FCM 토큰 등록 + 포그라운드 알림 설정
+  Future<void> setupFcm() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(
+        alert: true, badge: true, sound: true,
+      );
+
+      final token = await messaging.getToken();
+      if (token != null && accessToken != null) {
+        await dio.post('$baseUrl/api/users/me/fcm-token',
+          data: {'token': token, 'deviceType': 'ANDROID'},
+          options: authHeaders,
+        );
+        debugPrint('[FCM] 토큰 등록 완료: ${token.substring(0, 20)}...');
+      }
+
+      messaging.onTokenRefresh.listen((newToken) async {
+        if (accessToken != null) {
+          await dio.post('$baseUrl/api/users/me/fcm-token',
+            data: {'token': newToken, 'deviceType': 'ANDROID'},
+            options: authHeaders,
+          );
+          debugPrint('[FCM] 토큰 갱신 등록');
+        }
+      });
+
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        debugPrint('[FCM 포그라운드] ${message.notification?.title}: ${message.notification?.body}');
+        if (_navigatorKey.currentContext != null) {
+          final ctx = _navigatorKey.currentContext!;
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+              content: Text('${message.notification?.title ?? "알림"}: ${message.notification?.body ?? ""}'),
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(label: '확인', onPressed: () {}),
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint('[FCM] 설정 실패: $e');
+    }
+  }
+
+  static final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  GlobalKey<NavigatorState> get navigatorKey => _navigatorKey;
 }
 
 // ══════════════════════════════════════
@@ -85,7 +143,6 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(seconds: 2));
     final app = AppState();
 
-    // 저장된 RT 없으면 로그인 화면으로
     if (app.refreshToken == null) {
       setState(() => status = '로그인이 필요합니다');
       await Future.delayed(const Duration(seconds: 1));
@@ -93,7 +150,6 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    // 자동 로그인 시도
     try {
       final res = await app.dio.post('${app.baseUrl}/api/auth/refresh',
         data: {'refreshToken': app.refreshToken});
@@ -152,7 +208,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final app = AppState();
 
     try {
-      // 1. 카카오 SDK 로그인
       OAuthToken token;
       if (await isKakaoTalkInstalled()) {
         token = await UserApi.instance.loginWithKakaoTalk();
@@ -162,7 +217,6 @@ class _LoginScreenState extends State<LoginScreen> {
       app.kakaoAccessToken = token.accessToken;
       setState(() => message = '카카오 로그인 성공');
 
-      // 2. 서버 소셜 로그인
       final res = await app.dio.post('${app.baseUrl}/api/auth/social', data: {
         'provider': 'KAKAO',
         'socialToken': app.kakaoAccessToken,
@@ -178,7 +232,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       setState(() => message = '서버 로그인 성공! (userId=${data['userId']})');
 
-      // 3. 분기
+      await app.setupFcm();
+
       if (mounted) {
         await Future.delayed(const Duration(milliseconds: 500));
         if (data['accountStatus'] == 'PENDING_DELETION') {
@@ -272,6 +327,7 @@ class _LoginScreenState extends State<LoginScreen> {
       app.accessToken = res.data['accessToken'];
       app.userId = userId;
       setState(() => message = 'Dev 로그인 성공! (userId=$userId)');
+      await app.setupFcm();
       await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) {
         Navigator.pushReplacement(context,
@@ -644,7 +700,6 @@ class TutorialScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 인디케이터
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(pages.length, (i) => Container(
@@ -746,7 +801,7 @@ class DiaryUnifiedTab extends StatefulWidget {
 }
 
 class _DiaryUnifiedTabState extends State<DiaryUnifiedTab> {
-  int _subIndex = 0; // 0=작성, 1=히스토리, 2=임시저장
+  int _subIndex = 0;
 
   static const _labels = ['작성', '히스토리', '임시저장'];
 
@@ -851,6 +906,7 @@ class _DiaryWriteTabState extends State<DiaryWriteTab> {
   int? todayDiaryId;
   String? message;
   bool isEdit = false;
+  String? weeklyTopic;
 
   @override
   void initState() {
@@ -859,11 +915,20 @@ class _DiaryWriteTabState extends State<DiaryWriteTab> {
   }
 
   Future<void> _init() async {
-    await _checkToday();
-    // 오늘 일기가 없으면 임시저장 확인
+    await Future.wait([_checkToday(), _loadWeeklyTopic()]);
     if (todayExists != true) {
       await _checkDrafts();
     }
+  }
+
+  Future<void> _loadWeeklyTopic() async {
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/diaries/weekly-topic', options: app.authHeaders);
+      final data = res.data['data'];
+      if (data != null && data['topic'] != null) {
+        setState(() => weeklyTopic = data['topic']);
+      }
+    } catch (_) {}
   }
 
   Future<void> _checkToday() async {
@@ -875,7 +940,6 @@ class _DiaryWriteTabState extends State<DiaryWriteTab> {
         todayDiaryId = data['diaryId'];
       });
       if (todayExists == true && todayDiaryId != null) {
-        // 기존 일기 로드
         final detail = await app.dio.get('${app.baseUrl}/api/diaries/$todayDiaryId', options: app.authHeaders);
         contentCtrl.text = detail.data['data']['content'];
         setState(() => isEdit = detail.data['data']['isEditable']);
@@ -917,18 +981,27 @@ class _DiaryWriteTabState extends State<DiaryWriteTab> {
   Future<void> _submit() async {
     try {
       if (todayExists == true && todayDiaryId != null) {
-        // 수정
         await app.dio.patch('${app.baseUrl}/api/diaries/$todayDiaryId',
           data: {'content': contentCtrl.text}, options: app.authHeaders);
         setState(() => message = '일기 수정 완료!');
       } else {
-        // 작성
         final res = await app.dio.post('${app.baseUrl}/api/diaries',
           data: {'content': contentCtrl.text, 'visibility': 'PRIVATE'}, options: app.authHeaders);
+        final diaryId = res.data['data']['diaryId'];
         setState(() {
-          message = '일기 작성 완료! (id=${res.data['data']['diaryId']})';
+          message = '일기 작성 완료! (id=$diaryId)';
           todayExists = true;
-          todayDiaryId = res.data['data']['diaryId'];
+          todayDiaryId = diaryId;
+        });
+        // AI 분석 자동 트리거 (2초 딜레이)
+        Future.delayed(const Duration(seconds: 2), () async {
+          try {
+            await app.dio.post('${app.baseUrl}/api/dev/ai/simulate/$diaryId');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('AI 분석 시작됨'), duration: Duration(seconds: 2)));
+            }
+          } catch (_) {}
         });
       }
     } catch (e) {
@@ -966,6 +1039,24 @@ class _DiaryWriteTabState extends State<DiaryWriteTab> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // 주간 주제 표시
+            if (weeklyTopic != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.lightbulb_outline, color: Colors.orange, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('이번 주 주제: $weeklyTopic',
+                    style: const TextStyle(color: Colors.orange, fontSize: 13))),
+                ]),
+              ),
             Expanded(
               child: TextField(
                 controller: contentCtrl,
@@ -1204,6 +1295,17 @@ class _DraftTabState extends State<DraftTab> {
     }
   }
 
+  Future<void> _deleteDraft(int draftId) async {
+    try {
+      await app.dio.delete('${app.baseUrl}/api/diaries/draft/$draftId', options: app.authHeaders);
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1231,23 +1333,21 @@ class _DraftTabState extends State<DraftTab> {
                     color: Colors.red, alignment: Alignment.centerRight,
                     padding: const EdgeInsets.only(right: 20),
                     child: const Icon(Icons.delete, color: Colors.white)),
-                  onDismissed: (_) async {
-                    try {
-                      await app.dio.delete(
-                        '${app.baseUrl}/api/diaries/draft/${d['draftId']}', options: app.authHeaders);
-                      _load();
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(app.errMsg(e))));
-                      }
-                    }
-                  },
+                  onDismissed: (_) => _deleteDraft(d['draftId']),
                   child: Card(
                     child: ListTile(
                       title: Text(d['content'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
                       subtitle: Text(d['savedAt']?.toString().substring(0, 16) ?? ''),
-                      trailing: const Text('← 밀어서 삭제', style: TextStyle(fontSize: 10, color: Colors.white38)),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                            onPressed: () => _deleteDraft(d['draftId']),
+                          ),
+                          const Text('← 밀어서 삭제', style: TextStyle(fontSize: 10, color: Colors.white38)),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -1307,6 +1407,7 @@ class _ExploreTabState extends State<ExploreTab> {
       appBar: AppBar(
         title: const Text('일기 탐색'),
         actions: [
+          IconButton(icon: const Icon(Icons.recommend), onPressed: _showAiRecommendations, tooltip: 'AI 추천'),
           IconButton(icon: const Icon(Icons.mail), onPressed: _showReceivedRequests),
           IconButton(icon: const Icon(Icons.analytics), onPressed: _showLifestyleReport),
         ],
@@ -1344,14 +1445,43 @@ class _ExploreTabState extends State<ExploreTab> {
 
   void _showDiaryDetail(Map<String, dynamic> d) async {
     try {
-      final res = await app.dio.get(
-        '${app.baseUrl}/api/matching/recommendations/${d['diaryId']}/preview',
+      // 상세 API 사용
+      final detailRes = await app.dio.get(
+        '${app.baseUrl}/api/diaries/${d['diaryId']}/detail',
         options: app.authHeaders);
       if (context.mounted) {
         Navigator.push(context, MaterialPageRoute(
           builder: (_) => ExploreDetailScreen(
             diaryId: d['diaryId'],
-            preview: res.data['data'])));
+            preview: detailRes.data['data'])));
+      }
+    } catch (e) {
+      // detail 실패 시 preview 폴백
+      try {
+        final previewRes = await app.dio.get(
+          '${app.baseUrl}/api/matching/recommendations/${d['diaryId']}/preview',
+          options: app.authHeaders);
+        if (context.mounted) {
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => ExploreDetailScreen(
+              diaryId: d['diaryId'],
+              preview: previewRes.data['data'])));
+        }
+      } catch (e2) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e2))));
+        }
+      }
+    }
+  }
+
+  void _showAiRecommendations() async {
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/matching/recommendations',
+        options: app.authHeaders);
+      if (context.mounted) {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => AiRecommendationsScreen(data: res.data['data'])));
       }
     } catch (e) {
       if (context.mounted) {
@@ -1391,7 +1521,82 @@ class _ExploreTabState extends State<ExploreTab> {
   }
 }
 
-// ── 5.2 블라인드 미리보기 + 5.4 선택/넘기기 ──
+// ── AI 추천 목록 화면 ──
+class AiRecommendationsScreen extends StatelessWidget {
+  final dynamic data;
+  const AiRecommendationsScreen({super.key, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppState();
+    final recommendations = (data is Map && data['recommendations'] != null)
+      ? data['recommendations'] as List
+      : (data is List ? data : []);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('AI 추천')),
+      body: recommendations.isEmpty
+        ? Center(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.recommend, size: 64, color: Colors.white24),
+              const SizedBox(height: 12),
+              Text(data is Map && data['guidanceMessage'] != null
+                ? data['guidanceMessage'] : 'AI 추천 결과가 없습니다',
+                style: const TextStyle(color: Colors.white54),
+                textAlign: TextAlign.center),
+            ],
+          ))
+        : ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: recommendations.length,
+            itemBuilder: (context, index) {
+              final r = recommendations[index];
+              return Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.orange.withOpacity(0.2),
+                    child: Text('${index + 1}', style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                  ),
+                  title: Text(r['previewContent'] ?? r['preview'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+                  subtitle: Row(children: [
+                    Text('${r['ageGroupLabel'] ?? r['ageGroup'] ?? ''} · ${r['region'] ?? ''}'),
+                    if (r['matchScore'] != null) ...[
+                      const SizedBox(width: 8),
+                      Chip(
+                        label: Text('${(r['matchScore'] * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(fontSize: 10)),
+                        backgroundColor: Colors.green.withOpacity(0.2)),
+                    ],
+                  ]),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    final diaryId = r['diaryId'];
+                    if (diaryId == null) return;
+                    try {
+                      final res = await app.dio.get(
+                        '${app.baseUrl}/api/matching/recommendations/$diaryId/preview',
+                        options: app.authHeaders);
+                      if (context.mounted) {
+                        Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => ExploreDetailScreen(diaryId: diaryId, preview: res.data['data'])));
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+                      }
+                    }
+                  },
+                ),
+              );
+            },
+          ),
+    );
+  }
+}
+
 // ── 받은 매칭 요청 화면 ──
 class ReceivedRequestsScreen extends StatefulWidget {
   final List<dynamic> requests;
@@ -1452,13 +1657,11 @@ class _ReceivedRequestsScreenState extends State<ReceivedRequestsScreen> {
       final res = await app.dio.post(
         '${app.baseUrl}/api/matching/requests/$matchingId/accept',
         options: app.authHeaders);
-      final data = res.data['data'];
       setState(() => requests.removeAt(index));
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('매칭 성사! 교환일기 방으로 이동합니다.'),
           duration: Duration(seconds: 2)));
-        // 매칭 성사 시 교환일기 탭으로 이동 (홈 재진입)
         Navigator.pushAndRemoveUntil(context,
           MaterialPageRoute(builder: (_) => const HomeScreen(initialTab: 2)),
           (_) => false);
@@ -1493,7 +1696,7 @@ class ExploreDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(preview['preview'] ?? '', style: const TextStyle(fontSize: 16, height: 1.6)),
+            Text(preview['preview'] ?? preview['content'] ?? '', style: const TextStyle(fontSize: 16, height: 1.6)),
             const SizedBox(height: 16),
             if (preview['aiIntro'] != null)
               Container(
@@ -1506,7 +1709,11 @@ class ExploreDetailScreen extends StatelessWidget {
             const SizedBox(height: 12),
             if (preview['keywords'] != null)
               Wrap(spacing: 6, children: (preview['keywords'] as List).map((k) =>
-                Chip(label: Text(k, style: const TextStyle(fontSize: 12)))).toList()),
+                Chip(label: Text(k is String ? k : k['label'] ?? '', style: const TextStyle(fontSize: 12)))).toList()),
+            if (preview['personalityKeywords'] != null)
+              Wrap(spacing: 6, children: (preview['personalityKeywords'] as List).map((k) =>
+                Chip(label: Text(k is String ? k : k['label'] ?? '', style: const TextStyle(fontSize: 12)),
+                  backgroundColor: Colors.purple.withOpacity(0.2))).toList()),
             if (preview['tags'] != null)
               Wrap(spacing: 6, children: (preview['tags'] as List).map((t) =>
                 Chip(label: Text('#$t', style: const TextStyle(fontSize: 11)),
@@ -1517,6 +1724,23 @@ class ExploreDetailScreen extends StatelessWidget {
             if (preview['matchScore'] != null)
               Text('유사도: ${(preview['matchScore'] * 100).toStringAsFixed(0)}%',
                 style: const TextStyle(color: Colors.greenAccent)),
+            // 작성자의 다른 일기
+            if (preview['otherDiaries'] != null && (preview['otherDiaries'] as List).isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Divider(),
+              const Text('작성자의 다른 일기', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white54)),
+              const SizedBox(height: 8),
+              ...(preview['otherDiaries'] as List).map((od) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Card(
+                  child: ListTile(
+                    dense: true,
+                    title: Text(od['contentPreview'] ?? od['preview'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(od['createdAt']?.toString().substring(0, 10) ?? ''),
+                  ),
+                ),
+              )),
+            ],
           ],
         ),
       ),
@@ -1658,7 +1882,9 @@ class LifestyleReportScreen extends StatelessWidget {
   );
 }
 
-// ── 더보기 탭 (설정 + Redis 모니터링) ──
+// ══════════════════════════════════════
+// 더보기 탭
+// ══════════════════════════════════════
 class MoreTab extends StatefulWidget {
   const MoreTab({super.key});
 
@@ -1666,7 +1892,6 @@ class MoreTab extends StatefulWidget {
   State<MoreTab> createState() => _MoreTabState();
 }
 
-// 하위 호환을 위해 SettingsTab 유지
 typedef SettingsTab = MoreTab;
 
 class _MoreTabState extends State<MoreTab> {
@@ -1700,7 +1925,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/users/me', options: app.authHeaders);
-                _showJson('내 프로필', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => MyProfileScreen(profile: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1709,7 +1937,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/users/me/ai-profile', options: app.authHeaders);
-                _showJson('AI 프로필', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => AiProfileScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1718,7 +1949,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/users/me/ideal-type', options: app.authHeaders);
-                _showJson('이상형 키워드', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => IdealTypeViewScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1731,16 +1965,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/notifications', options: app.authHeaders);
-                _showJson('알림 (미읽음: ${res.data['data']['unreadCount']})', res.data['data']);
-              } catch (e) { _snack(app.errMsg(e)); }
-            },
-          ),
-          ListTile(
-            title: const Text('전체 읽음 처리'), leading: const Icon(Icons.done_all),
-            onTap: () async {
-              try {
-                final res = await app.dio.patch('${app.baseUrl}/api/notifications/read-all', options: app.authHeaders);
-                _snack('읽음 처리: ${res.data['data']['updatedCount']}건');
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => NotificationListScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1749,17 +1977,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/users/me/notification-settings', options: app.authHeaders);
-                _showJson('알림 설정', res.data['data']);
-              } catch (e) { _snack(app.errMsg(e)); }
-            },
-          ),
-          ListTile(
-            title: const Text('알림 설정 수정 (채팅 OFF)'), leading: const Icon(Icons.toggle_off),
-            onTap: () async {
-              try {
-                final res = await app.dio.patch('${app.baseUrl}/api/users/me/notification-settings',
-                  data: {'chat': false}, options: app.authHeaders);
-                _showJson('알림 설정 변경됨', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => NotificationSettingsScreen(settings: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1772,7 +1993,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/users/me/block-list', options: app.authHeaders);
-                _showJson('차단 목록', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => BlockListScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1793,7 +2017,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/users/me/history/exchange-rooms', options: app.authHeaders);
-                _showJson('교환일기 히스토리', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => ExchangeHistoryScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1802,7 +2029,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/users/me/history/chat-rooms', options: app.authHeaders);
-                _showJson('채팅 히스토리', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => ChatHistoryScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1856,20 +2086,6 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () => _showRedisPatternDialog(),
           ),
 
-          // ── 앱 설정 ──
-          const Divider(),
-          const Padding(padding: EdgeInsets.all(12), child: Text('앱 설정', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-          ListTile(
-            title: const Text('다크모드 ON'), leading: const Icon(Icons.dark_mode),
-            onTap: () async {
-              try {
-                final res = await app.dio.patch('${app.baseUrl}/api/users/me/settings',
-                  data: {'darkMode': true}, options: app.authHeaders);
-                _showJson('앱 설정', res.data['data']);
-              } catch (e) { _snack(app.errMsg(e)); }
-            },
-          ),
-
           // ── 공지/FAQ ──
           const Divider(),
           const Padding(padding: EdgeInsets.all(12), child: Text('공지/지원', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
@@ -1878,7 +2094,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/notices', options: app.authHeaders);
-                _showJson('공지사항', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => NoticeListScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1887,7 +2106,10 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/faq', options: app.authHeaders);
-                _showJson('FAQ', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => FaqScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1900,9 +2122,20 @@ class _MoreTabState extends State<MoreTab> {
             onTap: () async {
               try {
                 final res = await app.dio.get('${app.baseUrl}/api/support/inquiries', options: app.authHeaders);
-                _showJson('내 문의 목록', res.data['data']);
+                if (mounted) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => InquiryListScreen(data: res.data['data'])));
+                }
               } catch (e) { _snack(app.errMsg(e)); }
             },
+          ),
+
+          // ── 앱 설정 ──
+          const Divider(),
+          const Padding(padding: EdgeInsets.all(12), child: Text('앱 설정', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+          ListTile(
+            title: const Text('설정 관리'), leading: const Icon(Icons.settings),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AppSettingsScreen())),
           ),
 
           // ── 계정 ──
@@ -1919,6 +2152,14 @@ class _MoreTabState extends State<MoreTab> {
                 _snack('토큰 갱신 성공!');
               } catch (e) { _snack(app.errMsg(e)); }
             },
+          ),
+          ListTile(
+            title: const Text('이의신청'), leading: const Icon(Icons.gavel),
+            onTap: () => _showAppealDialog(),
+          ),
+          ListTile(
+            title: const Text('AI 동의 철회'), leading: const Icon(Icons.privacy_tip),
+            onTap: () => _showAiConsentRevokeDialog(),
           ),
           ListTile(
             title: const Text('로그아웃', style: TextStyle(color: Colors.red)),
@@ -1952,8 +2193,8 @@ class _MoreTabState extends State<MoreTab> {
             title: const Text('계정 복구 (탈퇴 유예 중일 때)'), leading: const Icon(Icons.restore),
             onTap: () async {
               try {
-                final res = await app.dio.post('${app.baseUrl}/api/users/me/restore', options: app.authHeaders);
-                _showJson('계정 복구', res.data['data']);
+                await app.dio.post('${app.baseUrl}/api/users/me/restore', options: app.authHeaders);
+                _snack('계정 복구 완료!');
               } catch (e) { _snack(app.errMsg(e)); }
             },
           ),
@@ -1970,9 +2211,9 @@ class _MoreTabState extends State<MoreTab> {
                     onPressed: () async {
                       Navigator.pop(context);
                       try {
-                        final res = await app.dio.post('${app.baseUrl}/api/users/me/deactivate',
+                        await app.dio.post('${app.baseUrl}/api/users/me/deactivate',
                           data: {'reason': 'SERVICE_DISSATISFACTION'}, options: app.authHeaders);
-                        _showJson('탈퇴 처리', res.data['data']);
+                        _snack('탈퇴 처리 완료 (30일 유예)');
                       } catch (e) { _snack(app.errMsg(e)); }
                     },
                     child: const Text('탈퇴', style: TextStyle(color: Colors.red))),
@@ -2026,6 +2267,52 @@ class _MoreTabState extends State<MoreTab> {
             _snack('차단 완료');
           } catch (e) { _snack(app.errMsg(e)); }
         }, child: const Text('차단', style: TextStyle(color: Colors.red))),
+      ],
+    ));
+  }
+
+  void _showAppealDialog() {
+    final reasonCtrl = TextEditingController();
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('제재 이의신청'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(
+          controller: reasonCtrl,
+          decoration: const InputDecoration(labelText: '사유 (20~500자)', border: OutlineInputBorder()),
+          maxLines: 5,
+        ),
+        const SizedBox(height: 8),
+        const Text('이의신청은 한 번만 가능합니다.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(onPressed: () async {
+          Navigator.pop(context);
+          final reason = reasonCtrl.text.trim();
+          if (reason.length < 20) { _snack('20자 이상 입력해주세요'); return; }
+          try {
+            final res = await app.dio.post('${app.baseUrl}/api/users/me/appeals',
+              data: {'reason': reason}, options: app.authHeaders);
+            _snack('이의신청 접수 완료: ID=${res.data['data']['appealId']}');
+          } catch (e) { _snack(app.errMsg(e)); }
+        }, child: const Text('제출')),
+      ],
+    ));
+  }
+
+  void _showAiConsentRevokeDialog() {
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('AI 동의 철회'),
+      content: const Text('AI 분석 동의를 철회하면 성격 분석, 매칭 추천 등 AI 기능을 이용할 수 없게 됩니다.\n\n정말 철회하시겠어요?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(onPressed: () async {
+          Navigator.pop(context);
+          try {
+            await app.dio.delete('${app.baseUrl}/api/consent', options: app.authHeaders);
+            _snack('AI 동의 철회 완료');
+          } catch (e) { _snack(app.errMsg(e)); }
+        }, child: const Text('철회', style: TextStyle(color: Colors.red))),
       ],
     ));
   }
@@ -2147,6 +2434,1230 @@ class _MoreTabState extends State<MoreTab> {
   }
 }
 
+// ══════════════════════════════════════
+// 프로필 상세 화면
+// ══════════════════════════════════════
+class MyProfileScreen extends StatefulWidget {
+  final Map<String, dynamic> profile;
+  const MyProfileScreen({super.key, required this.profile});
+
+  @override
+  State<MyProfileScreen> createState() => _MyProfileScreenState();
+}
+
+class _MyProfileScreenState extends State<MyProfileScreen> {
+  final app = AppState();
+  late Map<String, dynamic> profile;
+
+  @override
+  void initState() {
+    super.initState();
+    profile = widget.profile;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('내 프로필')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(children: [
+          // 프로필 카드
+          Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(children: [
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.orange.withOpacity(0.2),
+                  child: Text(
+                    (profile['nickname'] ?? '?').toString().substring(0, 1),
+                    style: const TextStyle(fontSize: 32, color: Colors.orange),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(profile['nickname'] ?? '???',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                if (profile['onboardingCompleted'] == true)
+                  const Chip(label: Text('온보딩 완료', style: TextStyle(fontSize: 11, color: Colors.greenAccent))),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // 상세 정보
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Column(children: [
+              _profileRow(Icons.person, '성별', _genderLabel(profile['gender'])),
+              const Divider(height: 1),
+              _profileRow(Icons.cake, '생년월일', profile['birthDate'] ?? '-'),
+              const Divider(height: 1),
+              _profileRow(Icons.location_on, '지역', profile['sido'] ?? '-'),
+              const Divider(height: 1),
+              _profileRow(Icons.school, '학교', profile['school'] ?? '-'),
+              const Divider(height: 1),
+              _profileRow(Icons.badge, 'userId', '${profile['userId'] ?? app.userId ?? '-'}'),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _showEditDialog,
+              icon: const Icon(Icons.edit),
+              label: const Text('프로필 수정'),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _profileRow(IconData icon, String label, String value) {
+    return ListTile(
+      leading: Icon(icon, size: 20, color: Colors.white54),
+      title: Text(label, style: const TextStyle(fontSize: 13, color: Colors.white54)),
+      trailing: Text(value, style: const TextStyle(fontSize: 14)),
+    );
+  }
+
+  String _genderLabel(String? g) {
+    if (g == 'MALE') return '남성';
+    if (g == 'FEMALE') return '여성';
+    return g ?? '-';
+  }
+
+  void _showEditDialog() {
+    final nicknameCtrl = TextEditingController(text: profile['nickname']);
+    final sidoCtrl = TextEditingController(text: profile['sido']);
+    showDialog(context: context, builder: (_) => AlertDialog(
+      title: const Text('프로필 수정'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: nicknameCtrl, decoration: const InputDecoration(labelText: '닉네임')),
+        const SizedBox(height: 8),
+        TextField(controller: sidoCtrl, decoration: const InputDecoration(labelText: '시/도')),
+        const SizedBox(height: 8),
+        const Text('닉네임은 30일에 1회만 변경 가능', style: TextStyle(fontSize: 11, color: Colors.grey)),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(onPressed: () async {
+          Navigator.pop(context);
+          try {
+            final data = <String, dynamic>{};
+            if (nicknameCtrl.text != profile['nickname']) data['nickname'] = nicknameCtrl.text;
+            if (sidoCtrl.text != profile['sido']) data['sido'] = sidoCtrl.text;
+            if (data.isEmpty) return;
+            final res = await app.dio.patch('${app.baseUrl}/api/users/me/profile',
+              data: data, options: app.authHeaders);
+            setState(() => profile = res.data['data']);
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('프로필 수정 완료')));
+          } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+          }
+        }, child: const Text('저장')),
+      ],
+    ));
+  }
+}
+
+// ══════════════════════════════════════
+// AI 프로필 화면
+// ══════════════════════════════════════
+class AiProfileScreen extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const AiProfileScreen({super.key, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final diaryCount = data['analyzedDiaryCount'] ?? data['diaryCount'] ?? 0;
+    final available = data['available'] != false;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('AI 성격 분석')),
+      body: !available
+        ? Center(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.psychology, size: 64, color: Colors.white24),
+              const SizedBox(height: 12),
+              Text(data['message'] ?? '일기를 3편 이상 작성하면 분석이 시작됩니다',
+                style: const TextStyle(color: Colors.white54), textAlign: TextAlign.center),
+            ],
+          ))
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // 분석된 일기 수
+              Card(
+                color: Colors.orange.withOpacity(0.1),
+                child: ListTile(
+                  leading: const Icon(Icons.auto_stories, color: Colors.orange),
+                  title: Text('분석된 일기: $diaryCount편'),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // 성격 키워드
+              if (data['personalityKeywords'] != null)
+                _tagSection('성격 키워드', data['personalityKeywords'], Colors.purple),
+              if (data['emotionKeywords'] != null || data['emotionTags'] != null)
+                _tagSection('감정 태그', data['emotionKeywords'] ?? data['emotionTags'], Colors.pink),
+              if (data['lifestyleKeywords'] != null || data['lifestyleTags'] != null)
+                _tagSection('라이프스타일 태그', data['lifestyleKeywords'] ?? data['lifestyleTags'], Colors.teal),
+              if (data['relationshipKeywords'] != null || data['relationshipTags'] != null)
+                _tagSection('관계 성향', data['relationshipKeywords'] ?? data['relationshipTags'], Colors.blue),
+              if (data['toneKeywords'] != null || data['toneTags'] != null)
+                _tagSection('글쓰기 톤', data['toneKeywords'] ?? data['toneTags'], Colors.amber),
+
+              // AI 한줄 설명
+              if (data['aiDescription'] != null || data['summary'] != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('AI 분석 요약', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Text(data['aiDescription'] ?? data['summary'] ?? '',
+                      style: const TextStyle(height: 1.5)),
+                  ]),
+                ),
+              ],
+            ]),
+          ),
+    );
+  }
+
+  Widget _tagSection(String title, dynamic tags, Color color) {
+    if (tags == null) return const SizedBox.shrink();
+    final tagList = tags is List ? tags : [];
+    if (tagList.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white54, fontSize: 14)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 6, runSpacing: 6, children: tagList.map((t) {
+          final label = t is String ? t : (t is Map ? (t['label'] ?? t['keyword'] ?? '') : '$t');
+          final count = t is Map ? t['count'] : null;
+          return Chip(
+            label: Text(
+              count != null ? '$label ($count)' : '$label',
+              style: TextStyle(fontSize: 12, color: color),
+            ),
+            backgroundColor: color.withOpacity(0.15),
+            side: BorderSide(color: color.withOpacity(0.3)),
+          );
+        }).toList()),
+      ]),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 이상형 키워드 조회/수정 화면
+// ══════════════════════════════════════
+class IdealTypeViewScreen extends StatefulWidget {
+  final dynamic data;
+  const IdealTypeViewScreen({super.key, required this.data});
+
+  @override
+  State<IdealTypeViewScreen> createState() => _IdealTypeViewScreenState();
+}
+
+class _IdealTypeViewScreenState extends State<IdealTypeViewScreen> {
+  final app = AppState();
+  late dynamic data;
+
+  @override
+  void initState() {
+    super.initState();
+    data = widget.data;
+  }
+
+  List<dynamic> get keywords {
+    if (data is Map && data['keywords'] != null) return data['keywords'];
+    if (data is List) return data;
+    return [];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('이상형 키워드')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('현재 이상형 키워드', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text('${keywords.length}/3 선택됨', style: const TextStyle(color: Colors.white54)),
+            const SizedBox(height: 16),
+            keywords.isEmpty
+              ? const Center(child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Text('설정된 키워드가 없습니다', style: TextStyle(color: Colors.white38)),
+                ))
+              : Wrap(
+                  spacing: 10, runSpacing: 10,
+                  children: keywords.map((k) {
+                    final label = k is String ? k : (k is Map ? (k['label'] ?? k['keyword'] ?? '') : '$k');
+                    return Chip(
+                      label: Text(label, style: const TextStyle(fontSize: 14)),
+                      backgroundColor: Colors.pink.withOpacity(0.15),
+                      side: BorderSide(color: Colors.pink.withOpacity(0.3)),
+                      avatar: const Icon(Icons.favorite, size: 16, color: Colors.pink),
+                    );
+                  }).toList(),
+                ),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _showEditScreen,
+                icon: const Icon(Icons.edit),
+                label: const Text('키워드 수정'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditScreen() async {
+    try {
+      final keywordRes = await app.dio.get('${app.baseUrl}/api/users/ideal-type/keyword-list');
+      final allKeywords = keywordRes.data['data']['keywords'] as List;
+      // 현재 선택된 ID 추출
+      final selectedIds = <int>{};
+      for (final k in keywords) {
+        if (k is Map && k['id'] != null) selectedIds.add(k['id']);
+      }
+
+      if (mounted) {
+        final result = await Navigator.push<Set<int>>(context, MaterialPageRoute(
+          builder: (_) => IdealTypeEditScreen(allKeywords: allKeywords, selectedIds: selectedIds)));
+        if (result != null) {
+          try {
+            final res = await app.dio.put('${app.baseUrl}/api/users/me/ideal-type',
+              data: {'keywordIds': result.toList()}, options: app.authHeaders);
+            setState(() => data = res.data['data']);
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이상형 키워드 수정 완료!')));
+          } catch (e) {
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+    }
+  }
+}
+
+class IdealTypeEditScreen extends StatefulWidget {
+  final List<dynamic> allKeywords;
+  final Set<int> selectedIds;
+  const IdealTypeEditScreen({super.key, required this.allKeywords, required this.selectedIds});
+
+  @override
+  State<IdealTypeEditScreen> createState() => _IdealTypeEditScreenState();
+}
+
+class _IdealTypeEditScreenState extends State<IdealTypeEditScreen> {
+  late Set<int> selected;
+
+  @override
+  void initState() {
+    super.initState();
+    selected = Set.from(widget.selectedIds);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('이상형 키워드 수정'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, selected),
+            child: const Text('저장', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${selected.length}/3 선택됨', style: const TextStyle(color: Colors.white54)),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8, runSpacing: 8,
+            children: widget.allKeywords.map((k) {
+              final id = k['id'] as int;
+              final isSelected = selected.contains(id);
+              return FilterChip(
+                label: Text(k['label']),
+                selected: isSelected,
+                onSelected: (v) {
+                  setState(() {
+                    if (v && selected.length < 3) selected.add(id);
+                    else selected.remove(id);
+                  });
+                },
+              );
+            }).toList(),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 알림 목록 화면
+// ══════════════════════════════════════
+class NotificationListScreen extends StatefulWidget {
+  final Map<String, dynamic> data;
+  const NotificationListScreen({super.key, required this.data});
+
+  @override
+  State<NotificationListScreen> createState() => _NotificationListScreenState();
+}
+
+class _NotificationListScreenState extends State<NotificationListScreen> {
+  final app = AppState();
+  late Map<String, dynamic> data;
+
+  @override
+  void initState() {
+    super.initState();
+    data = widget.data;
+  }
+
+  List<dynamic> get notifications => data['notifications'] ?? [];
+  int get unreadCount => data['unreadCount'] ?? 0;
+
+  IconData _iconForType(String? type) {
+    switch (type) {
+      case 'MATCHING_REQUEST': return Icons.favorite;
+      case 'MATCHING_MATCHED': return Icons.celebration;
+      case 'EXCHANGE_DIARY': return Icons.swap_horiz;
+      case 'EXCHANGE_REMIND': return Icons.alarm;
+      case 'EXCHANGE_EXPIRED': return Icons.timer_off;
+      case 'CHAT_MESSAGE': return Icons.chat;
+      case 'COUPLE_REQUEST': return Icons.favorite_border;
+      case 'COUPLE_ACCEPTED': return Icons.favorite;
+      case 'AI_ANALYSIS_DONE': return Icons.psychology;
+      case 'AI_REPORT_DONE': return Icons.analytics;
+      case 'SYSTEM': return Icons.info;
+      default: return Icons.notifications;
+    }
+  }
+
+  Color _colorForType(String? type) {
+    switch (type) {
+      case 'MATCHING_REQUEST':
+      case 'MATCHING_MATCHED': return Colors.pink;
+      case 'EXCHANGE_DIARY':
+      case 'EXCHANGE_REMIND': return Colors.orange;
+      case 'CHAT_MESSAGE': return Colors.blue;
+      case 'COUPLE_REQUEST':
+      case 'COUPLE_ACCEPTED': return Colors.red;
+      case 'AI_ANALYSIS_DONE':
+      case 'AI_REPORT_DONE': return Colors.purple;
+      default: return Colors.grey;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('알림 ($unreadCount 미읽음)'),
+        actions: [
+          TextButton.icon(
+            onPressed: _readAll,
+            icon: const Icon(Icons.done_all, size: 18),
+            label: const Text('전체 읽음'),
+          ),
+        ],
+      ),
+      body: notifications.isEmpty
+        ? const Center(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.notifications_none, size: 64, color: Colors.white24),
+              SizedBox(height: 12),
+              Text('알림이 없습니다', style: TextStyle(color: Colors.white54)),
+            ],
+          ))
+        : RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView.separated(
+              itemCount: notifications.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final n = notifications[i];
+                final isRead = n['readAt'] != null || n['isRead'] == true;
+                final type = n['type'] as String?;
+                final createdAt = n['createdAt'] as String? ?? '';
+                final timeStr = createdAt.length >= 16 ? createdAt.substring(5, 16).replaceAll('T', ' ') : '';
+
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: _colorForType(type).withOpacity(isRead ? 0.1 : 0.3),
+                    child: Icon(_iconForType(type), color: _colorForType(type), size: 20),
+                  ),
+                  title: Text(n['title'] ?? type ?? '알림',
+                    style: TextStyle(fontWeight: isRead ? FontWeight.normal : FontWeight.bold, fontSize: 14)),
+                  subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (n['message'] != null || n['body'] != null)
+                      Text(n['message'] ?? n['body'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13)),
+                    Text(timeStr, style: const TextStyle(fontSize: 11, color: Colors.white38)),
+                  ]),
+                  trailing: isRead
+                    ? null
+                    : Container(
+                        width: 8, height: 8,
+                        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.orange),
+                      ),
+                  onTap: () => _markAsRead(n),
+                );
+              },
+            ),
+          ),
+    );
+  }
+
+  Future<void> _reload() async {
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/notifications', options: app.authHeaders);
+      setState(() => data = res.data['data']);
+    } catch (_) {}
+  }
+
+  void _markAsRead(Map<String, dynamic> n) async {
+    if (n['readAt'] != null || n['isRead'] == true) return;
+    final id = n['notificationId'] ?? n['id'];
+    if (id == null) return;
+    try {
+      await app.dio.patch('${app.baseUrl}/api/notifications/$id/read', options: app.authHeaders);
+      _reload();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+    }
+  }
+
+  void _readAll() async {
+    try {
+      final res = await app.dio.patch('${app.baseUrl}/api/notifications/read-all', options: app.authHeaders);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${res.data['data']['updatedCount']}건 읽음 처리')));
+      _reload();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+    }
+  }
+}
+
+// ══════════════════════════════════════
+// 알림 설정 화면
+// ══════════════════════════════════════
+class NotificationSettingsScreen extends StatefulWidget {
+  final dynamic settings;
+  const NotificationSettingsScreen({super.key, required this.settings});
+
+  @override
+  State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
+}
+
+class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> {
+  final app = AppState();
+  late Map<String, bool> toggles;
+
+  static const _categories = [
+    {'key': 'matching', 'label': '매칭 알림', 'icon': Icons.favorite},
+    {'key': 'exchange', 'label': '교환일기 알림', 'icon': Icons.swap_horiz},
+    {'key': 'chat', 'label': '채팅 알림', 'icon': Icons.chat},
+    {'key': 'diary', 'label': '일기 알림', 'icon': Icons.auto_stories},
+    {'key': 'couple', 'label': '커플 알림', 'icon': Icons.people},
+    {'key': 'system', 'label': '시스템 알림', 'icon': Icons.info},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    toggles = {};
+    for (final c in _categories) {
+      final key = c['key'] as String;
+      if (widget.settings is Map) {
+        toggles[key] = widget.settings[key] ?? true;
+      } else {
+        toggles[key] = true;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('알림 설정')),
+      body: ListView(
+        children: _categories.map((c) {
+          final key = c['key'] as String;
+          return SwitchListTile(
+            secondary: Icon(c['icon'] as IconData, color: Colors.white54),
+            title: Text(c['label'] as String),
+            value: toggles[key] ?? true,
+            onChanged: (v) async {
+              setState(() => toggles[key] = v);
+              try {
+                await app.dio.patch('${app.baseUrl}/api/users/me/notification-settings',
+                  data: {key: v}, options: app.authHeaders);
+              } catch (e) {
+                setState(() => toggles[key] = !v);
+                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+              }
+            },
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 차단 목록 화면
+// ══════════════════════════════════════
+class BlockListScreen extends StatefulWidget {
+  final dynamic data;
+  const BlockListScreen({super.key, required this.data});
+
+  @override
+  State<BlockListScreen> createState() => _BlockListScreenState();
+}
+
+class _BlockListScreenState extends State<BlockListScreen> {
+  final app = AppState();
+  late List<dynamic> blocks;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.data is Map && widget.data['blocks'] != null) {
+      blocks = List.from(widget.data['blocks']);
+    } else if (widget.data is List) {
+      blocks = List.from(widget.data);
+    } else {
+      blocks = [];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('차단 목록 (${blocks.length})')),
+      body: blocks.isEmpty
+        ? const Center(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.block, size: 64, color: Colors.white24),
+              SizedBox(height: 12),
+              Text('차단한 사용자가 없습니다', style: TextStyle(color: Colors.white54)),
+            ],
+          ))
+        : ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: blocks.length,
+            itemBuilder: (_, i) {
+              final b = blocks[i];
+              final nickname = b['nickname'] ?? b['targetNickname'] ?? '사용자 ${b['targetUserId'] ?? ''}';
+              final blockedAt = b['blockedAt'] ?? b['createdAt'] ?? '';
+              final dateStr = blockedAt.toString().length >= 10 ? blockedAt.toString().substring(0, 10) : '';
+
+              return Card(
+                child: ListTile(
+                  leading: const CircleAvatar(child: Icon(Icons.person_off)),
+                  title: Text(nickname),
+                  subtitle: Text('차단일: $dateStr'),
+                  trailing: TextButton(
+                    onPressed: () => _unblock(b, i),
+                    child: const Text('해제', style: TextStyle(color: Colors.redAccent)),
+                  ),
+                ),
+              );
+            },
+          ),
+    );
+  }
+
+  void _unblock(Map<String, dynamic> b, int index) async {
+    final targetId = b['targetUserId'] ?? b['userId'];
+    if (targetId == null) return;
+    try {
+      await app.dio.delete('${app.baseUrl}/api/users/$targetId/block', options: app.authHeaders);
+      setState(() => blocks.removeAt(index));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('차단 해제 완료')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+    }
+  }
+}
+
+// ══════════════════════════════════════
+// 교환일기 히스토리 화면
+// ══════════════════════════════════════
+class ExchangeHistoryScreen extends StatelessWidget {
+  final dynamic data;
+  const ExchangeHistoryScreen({super.key, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final rooms = (data is Map && data['rooms'] != null) ? data['rooms'] as List
+      : (data is List ? data : []);
+
+    return Scaffold(
+      appBar: AppBar(title: Text('교환일기 히스토리 (${rooms.length})')),
+      body: rooms.isEmpty
+        ? const Center(child: Text('교환일기 기록이 없습니다', style: TextStyle(color: Colors.white54)))
+        : ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: rooms.length,
+            itemBuilder: (_, i) {
+              final r = rooms[i];
+              final status = r['status'] ?? '';
+              Color statusColor = Colors.grey;
+              if (status == 'COMPLETED') statusColor = Colors.green;
+              if (status == 'EXPIRED') statusColor = Colors.red;
+              if (status == 'CHAT_CONNECTED') statusColor = Colors.purple;
+              if (status == 'ACTIVE') statusColor = Colors.orange;
+
+              return Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      const Icon(Icons.menu_book, size: 18),
+                      const SizedBox(width: 8),
+                      Text(r['partnerNickname'] ?? '???',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(status,
+                          style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                    ]),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Text('라운드 ${r['roundNumber'] ?? r['roundCount'] ?? '-'}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                      const SizedBox(width: 12),
+                      Text('${r['currentTurn'] ?? r['turnCount'] ?? 0}/4 턴',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                      const Spacer(),
+                      if (r['createdAt'] != null)
+                        Text(r['createdAt'].toString().substring(0, 10),
+                          style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                    ]),
+                  ]),
+                ),
+              );
+            },
+          ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 채팅 히스토리 화면
+// ══════════════════════════════════════
+class ChatHistoryScreen extends StatelessWidget {
+  final dynamic data;
+  const ChatHistoryScreen({super.key, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final rooms = (data is Map && data['chatRooms'] != null) ? data['chatRooms'] as List
+      : (data is Map && data['rooms'] != null) ? data['rooms'] as List
+      : (data is List ? data : []);
+
+    return Scaffold(
+      appBar: AppBar(title: Text('채팅 히스토리 (${rooms.length})')),
+      body: rooms.isEmpty
+        ? const Center(child: Text('채팅 기록이 없습니다', style: TextStyle(color: Colors.white54)))
+        : ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: rooms.length,
+            itemBuilder: (_, i) {
+              final r = rooms[i];
+              final status = r['status'] ?? '';
+              Color statusColor = Colors.grey;
+              if (status == 'ACTIVE') statusColor = Colors.blue;
+              if (status == 'COUPLE_CONFIRMED') statusColor = Colors.pink;
+              if (status == 'CHAT_LEFT') statusColor = Colors.grey;
+
+              return Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: statusColor.withOpacity(0.2),
+                    child: Icon(
+                      status == 'COUPLE_CONFIRMED' ? Icons.favorite : Icons.chat,
+                      color: statusColor, size: 20),
+                  ),
+                  title: Text(r['partnerNickname'] ?? '???', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (r['lastMessage'] != null)
+                      Text(r['lastMessage'], maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13, color: Colors.white54)),
+                    Text(status, style: TextStyle(fontSize: 11, color: statusColor)),
+                  ]),
+                  trailing: r['lastMessageAt'] != null
+                    ? Text(r['lastMessageAt'].toString().substring(0, 10),
+                        style: const TextStyle(fontSize: 11, color: Colors.white38))
+                    : null,
+                ),
+              );
+            },
+          ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 공지사항 목록 화면
+// ══════════════════════════════════════
+class NoticeListScreen extends StatefulWidget {
+  final dynamic data;
+  const NoticeListScreen({super.key, required this.data});
+
+  @override
+  State<NoticeListScreen> createState() => _NoticeListScreenState();
+}
+
+class _NoticeListScreenState extends State<NoticeListScreen> {
+  final app = AppState();
+  List<dynamic> banners = [];
+  int unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExtras();
+  }
+
+  Future<void> _loadExtras() async {
+    try {
+      final results = await Future.wait([
+        app.dio.get('${app.baseUrl}/api/notices/banners', options: app.authHeaders).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': {'banners': []}})),
+        app.dio.get('${app.baseUrl}/api/notices/unread-count', options: app.authHeaders).catchError((_) => Response(requestOptions: RequestOptions(), data: {'data': {'count': 0}})),
+      ]);
+      setState(() {
+        banners = results[0].data['data']['banners'] ?? results[0].data['data'] ?? [];
+        unreadCount = results[1].data['data']['count'] ?? results[1].data['data']['unreadCount'] ?? 0;
+      });
+    } catch (_) {}
+  }
+
+  List<dynamic> get notices {
+    if (widget.data is Map && widget.data['notices'] != null) return widget.data['notices'];
+    if (widget.data is List) return widget.data;
+    return [];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(children: [
+          const Text('공지사항'),
+          if (unreadCount > 0) ...[
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(10)),
+              child: Text('$unreadCount', style: const TextStyle(fontSize: 11, color: Colors.white)),
+            ),
+          ],
+        ]),
+      ),
+      body: Column(children: [
+        // 배너 영역
+        if (banners.isNotEmpty)
+          SizedBox(
+            height: 80,
+            child: PageView.builder(
+              itemCount: banners.length,
+              itemBuilder: (_, i) {
+                final b = banners[i];
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.orange.withOpacity(0.3), Colors.deepOrange.withOpacity(0.2)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.all(12),
+                  child: Center(child: Text(
+                    b['title'] ?? b['content'] ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  )),
+                );
+              },
+            ),
+          ),
+        // 공지 목록
+        Expanded(
+          child: notices.isEmpty
+            ? const Center(child: Text('공지사항이 없습니다', style: TextStyle(color: Colors.white54)))
+            : ListView.separated(
+                padding: const EdgeInsets.all(12),
+                itemCount: notices.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) {
+                  final n = notices[i];
+                  final isPinned = n['pinned'] == true || n['isPinned'] == true;
+                  return ListTile(
+                    leading: isPinned
+                      ? const Icon(Icons.push_pin, color: Colors.orange, size: 20)
+                      : const Icon(Icons.article_outlined, size: 20),
+                    title: Text(n['title'] ?? '', style: TextStyle(
+                      fontWeight: isPinned ? FontWeight.bold : FontWeight.normal)),
+                    subtitle: Text(n['createdAt']?.toString().substring(0, 10) ?? ''),
+                    trailing: const Icon(Icons.chevron_right, size: 18),
+                    onTap: () => _showDetail(n),
+                  );
+                },
+              ),
+        ),
+      ]),
+    );
+  }
+
+  void _showDetail(Map<String, dynamic> notice) async {
+    final id = notice['noticeId'] ?? notice['id'];
+    if (id == null) return;
+    try {
+      final res = await app.dio.get('${app.baseUrl}/api/notices/$id', options: app.authHeaders);
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => NoticeDetailScreen(notice: res.data['data'])));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+    }
+  }
+}
+
+class NoticeDetailScreen extends StatelessWidget {
+  final Map<String, dynamic> notice;
+  const NoticeDetailScreen({super.key, required this.notice});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('공지사항')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (notice['pinned'] == true || notice['isPinned'] == true)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text('고정 공지', style: TextStyle(fontSize: 11, color: Colors.orange)),
+            ),
+          Text(notice['title'] ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(notice['createdAt']?.toString().substring(0, 10) ?? '',
+            style: const TextStyle(color: Colors.white38, fontSize: 13)),
+          const Divider(height: 24),
+          Text(notice['content'] ?? '', style: const TextStyle(fontSize: 15, height: 1.7)),
+        ]),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// FAQ 화면
+// ══════════════════════════════════════
+class FaqScreen extends StatelessWidget {
+  final dynamic data;
+  const FaqScreen({super.key, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final faqs = (data is Map && data['faqs'] != null) ? data['faqs'] as List
+      : (data is List ? data : []);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('자주 묻는 질문')),
+      body: faqs.isEmpty
+        ? const Center(child: Text('FAQ가 없습니다', style: TextStyle(color: Colors.white54)))
+        : ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: faqs.length,
+            itemBuilder: (_, i) {
+              final f = faqs[i];
+              return Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                child: ExpansionTile(
+                  leading: const Icon(Icons.help_outline, size: 20),
+                  title: Text(f['question'] ?? f['title'] ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  subtitle: f['category'] != null
+                    ? Text(f['category'], style: const TextStyle(fontSize: 11, color: Colors.white38))
+                    : null,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Text(f['answer'] ?? f['content'] ?? '', style: const TextStyle(height: 1.6, color: Colors.white70)),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 내 문의 목록 화면
+// ══════════════════════════════════════
+class InquiryListScreen extends StatelessWidget {
+  final dynamic data;
+  const InquiryListScreen({super.key, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppState();
+    final inquiries = (data is Map && data['inquiries'] != null) ? data['inquiries'] as List
+      : (data is List ? data : []);
+
+    return Scaffold(
+      appBar: AppBar(title: Text('내 문의 (${inquiries.length})')),
+      body: inquiries.isEmpty
+        ? const Center(child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.support_agent, size: 64, color: Colors.white24),
+              SizedBox(height: 12),
+              Text('문의 내역이 없습니다', style: TextStyle(color: Colors.white54)),
+            ],
+          ))
+        : ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: inquiries.length,
+            itemBuilder: (_, i) {
+              final inq = inquiries[i];
+              final status = inq['status'] ?? '';
+              final isAnswered = status == 'ANSWERED' || status == 'COMPLETED';
+
+              return Card(
+                child: ListTile(
+                  leading: Icon(
+                    isAnswered ? Icons.check_circle : Icons.hourglass_top,
+                    color: isAnswered ? Colors.greenAccent : Colors.amber,
+                  ),
+                  title: Text(inq['title'] ?? '', style: const TextStyle(fontSize: 14)),
+                  subtitle: Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: isAnswered ? Colors.green.withOpacity(0.15) : Colors.amber.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(isAnswered ? '답변완료' : '대기중',
+                        style: TextStyle(fontSize: 10, color: isAnswered ? Colors.greenAccent : Colors.amber)),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(inq['createdAt']?.toString().substring(0, 10) ?? '',
+                      style: const TextStyle(fontSize: 11)),
+                  ]),
+                  trailing: const Icon(Icons.chevron_right, size: 18),
+                  onTap: () async {
+                    final id = inq['inquiryId'] ?? inq['id'];
+                    if (id == null) return;
+                    try {
+                      final res = await app.dio.get('${app.baseUrl}/api/support/inquiries/$id',
+                        options: app.authHeaders);
+                      if (context.mounted) {
+                        Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => InquiryDetailScreen(inquiry: res.data['data'])));
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+                      }
+                    }
+                  },
+                ),
+              );
+            },
+          ),
+    );
+  }
+}
+
+class InquiryDetailScreen extends StatelessWidget {
+  final Map<String, dynamic> inquiry;
+  const InquiryDetailScreen({super.key, required this.inquiry});
+
+  @override
+  Widget build(BuildContext context) {
+    final status = inquiry['status'] ?? '';
+    final isAnswered = status == 'ANSWERED' || status == 'COMPLETED';
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('문의 상세')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // 상태 배지
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: isAnswered ? Colors.green.withOpacity(0.15) : Colors.amber.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(isAnswered ? '답변 완료' : '답변 대기중',
+              style: TextStyle(color: isAnswered ? Colors.greenAccent : Colors.amber, fontSize: 12)),
+          ),
+          const SizedBox(height: 12),
+          Text(inquiry['title'] ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(inquiry['createdAt']?.toString().substring(0, 10) ?? '',
+            style: const TextStyle(color: Colors.white38, fontSize: 13)),
+          if (inquiry['category'] != null) ...[
+            const SizedBox(height: 4),
+            Text('카테고리: ${inquiry['category']}', style: const TextStyle(color: Colors.white38, fontSize: 13)),
+          ],
+          const Divider(height: 24),
+          const Text('문의 내용', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white54)),
+          const SizedBox(height: 8),
+          Text(inquiry['content'] ?? '', style: const TextStyle(fontSize: 15, height: 1.6)),
+          if (inquiry['answer'] != null || inquiry['reply'] != null) ...[
+            const SizedBox(height: 24),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.withOpacity(0.2)),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('관리자 답변', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent, fontSize: 13)),
+                const SizedBox(height: 8),
+                Text(inquiry['answer'] ?? inquiry['reply'] ?? '', style: const TextStyle(height: 1.6)),
+              ]),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════
+// 앱 설정 화면
+// ══════════════════════════════════════
+class AppSettingsScreen extends StatefulWidget {
+  const AppSettingsScreen({super.key});
+
+  @override
+  State<AppSettingsScreen> createState() => _AppSettingsScreenState();
+}
+
+class _AppSettingsScreenState extends State<AppSettingsScreen> {
+  final app = AppState();
+  bool darkMode = true;
+  String language = 'ko';
+  bool ageFilter = false;
+
+  Future<void> _updateSetting(Map<String, dynamic> data) async {
+    try {
+      await app.dio.patch('${app.baseUrl}/api/users/me/settings',
+        data: data, options: app.authHeaders);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('설정 저장됨')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('앱 설정')),
+      body: ListView(children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.dark_mode),
+          title: const Text('다크 모드'),
+          value: darkMode,
+          onChanged: (v) {
+            setState(() => darkMode = v);
+            _updateSetting({'darkMode': v});
+          },
+        ),
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.language),
+          title: const Text('언어'),
+          trailing: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'ko', label: Text('한국어')),
+              ButtonSegment(value: 'en', label: Text('English')),
+            ],
+            selected: {language},
+            onSelectionChanged: (s) {
+              setState(() => language = s.first);
+              _updateSetting({'language': s.first});
+            },
+            style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          ),
+        ),
+        const Divider(height: 1),
+        SwitchListTile(
+          secondary: const Icon(Icons.filter_alt),
+          title: const Text('연령 필터'),
+          subtitle: const Text('같은 연령대만 매칭'),
+          value: ageFilter,
+          onChanged: (v) {
+            setState(() => ageFilter = v);
+            _updateSetting({'ageFilter': v});
+          },
+        ),
+      ]),
+    );
+  }
+}
+
 // ── 교환일기 바디 래퍼 ──
 class _ExchangeBody extends StatelessWidget {
   const _ExchangeBody();
@@ -2250,20 +3761,56 @@ class _ExchangeTabState extends State<ExchangeTab> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: statusColor.withOpacity(0.2),
-          child: Text('$turn/4', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
-        ),
-        title: Text(partner, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(statusText, style: TextStyle(color: statusColor, fontSize: 13)),
-        trailing: room['deadline'] != null
-          ? Text(_formatDeadline(room['deadline']), style: const TextStyle(fontSize: 11, color: Colors.white54))
-          : null,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
         onTap: () => Navigator.push(context,
           MaterialPageRoute(builder: (_) => ExchangeRoomScreen(roomId: room['roomId']))),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(Icons.menu_book, size: 18, color: statusColor),
+              const SizedBox(width: 8),
+              Text(partner, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(statusText,
+                  style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: List.generate(4, (i) {
+              final done = i < turn;
+              return Expanded(child: Container(
+                margin: EdgeInsets.only(right: i < 3 ? 3 : 0),
+                height: 4,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(2),
+                  color: done ? statusColor.withOpacity(0.7) : Colors.grey[800],
+                ),
+              ));
+            })),
+            const SizedBox(height: 8),
+            Row(children: [
+              Text('$turn/4 턴', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+              const Spacer(),
+              if (room['deadline'] != null)
+                Row(children: [
+                  Icon(Icons.schedule, size: 12, color: Colors.grey[600]),
+                  const SizedBox(width: 3),
+                  Text(_formatDeadline(room['deadline']),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                ]),
+            ]),
+          ]),
+        ),
       ),
     );
   }
@@ -2414,6 +3961,9 @@ class _ExchangeRoomScreenState extends State<ExchangeRoomScreen> {
     final isMyTurn = room!['isMyTurn'] == true;
     final partner = room!['partner'];
 
+    final totalTurns = (room!['totalTurns'] ?? 4) as int;
+    final currentTurn = (room!['currentTurn'] ?? 0) as int;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('${partner['nickname']}님과의 교환일기'),
@@ -2425,111 +3975,238 @@ class _ExchangeRoomScreenState extends State<ExchangeRoomScreen> {
         ],
       ),
       body: Column(children: [
-        // 상태 바
+        // ── 턴 진행 프로그레스 ──
         Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          color: status == 'COMPLETED' ? Colors.green.withOpacity(0.15) : Colors.orange.withOpacity(0.1),
-          child: Row(children: [
-            Text('라운드 ${room!['roundNumber']} | 턴 ${room!['currentTurn']}/4', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const Spacer(),
-            Text(status, style: TextStyle(
-              color: status == 'COMPLETED' ? Colors.greenAccent : Colors.orangeAccent,
-              fontWeight: FontWeight.bold)),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            border: Border(bottom: BorderSide(color: Colors.grey[800]!)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(Icons.menu_book, size: 18, color: Colors.orange[300]),
+              const SizedBox(width: 6),
+              Text('라운드 ${room!['roundNumber']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: status == 'COMPLETED'
+                    ? Colors.green.withOpacity(0.2)
+                    : isMyTurn ? Colors.orange.withOpacity(0.2) : Colors.blue.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  status == 'COMPLETED' ? '완주!' : isMyTurn ? '내 차례' : '상대 차례',
+                  style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.bold,
+                    color: status == 'COMPLETED' ? Colors.greenAccent : isMyTurn ? Colors.orangeAccent : Colors.blueAccent,
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: List.generate(totalTurns, (i) {
+              final turnNum = i + 1;
+              final done = turnNum <= diaries.length;
+              final isCurrent = turnNum == currentTurn && status == 'ACTIVE';
+              return Expanded(child: Container(
+                margin: EdgeInsets.only(right: i < totalTurns - 1 ? 4 : 0),
+                height: 6,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  color: done ? Colors.orange[400]
+                    : isCurrent ? Colors.orange.withOpacity(0.4)
+                    : Colors.grey[700],
+                ),
+              ));
+            })),
+            const SizedBox(height: 6),
+            Text('$currentTurn / $totalTurns 턴 진행됨',
+              style: TextStyle(fontSize: 11, color: Colors.grey[500])),
           ]),
         ),
 
-        // 일기 목록
+        // ── 일기 목록 (일기장 스타일) ──
         Expanded(child: diaries.isEmpty
-          ? const Center(child: Text('아직 작성된 일기가 없습니다.', style: TextStyle(color: Colors.white54)))
-          : ListView.builder(
-              itemCount: diaries.length,
-              itemBuilder: (_, i) {
-                final d = diaries[i];
-                final isMe = d['authorId'] == app.userId;
-                return Card(
-                  margin: EdgeInsets.fromLTRB(isMe ? 48 : 8, 4, isMe ? 8 : 48, 4),
-                  color: isMe ? Colors.orange.withOpacity(0.15) : Colors.blue.withOpacity(0.15),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
+          ? Center(child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.auto_stories, size: 56, color: Colors.grey[700]),
+                const SizedBox(height: 12),
+                Text('아직 작성된 일기가 없습니다', style: TextStyle(color: Colors.grey[600])),
+                if (status == 'ACTIVE' && isMyTurn) ...[
+                  const SizedBox(height: 8),
+                  Text('첫 번째 일기를 작성해보세요!', style: TextStyle(color: Colors.orange[300], fontSize: 13)),
+                ],
+              ],
+            ))
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                itemCount: diaries.length,
+                separatorBuilder: (_, __) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  child: Row(children: [
+                    Expanded(child: Divider(color: Colors.grey[800], thickness: 0.5)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(Icons.swap_vert, size: 14, color: Colors.grey[700]),
+                    ),
+                    Expanded(child: Divider(color: Colors.grey[800], thickness: 0.5)),
+                  ]),
+                ),
+                itemBuilder: (_, i) {
+                  final d = diaries[i];
+                  final isMe = d['authorId'] == app.userId;
+                  final writerName = isMe ? '나의 일기' : '${partner['nickname']}의 일기';
+                  final turnNum = d['turnNumber'] ?? (i + 1);
+                  final createdAt = d['createdAt'] as String? ?? '';
+                  final dateStr = createdAt.length >= 10 ? createdAt.substring(5, 10).replaceAll('-', '/') : '';
+
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.grey[850] ?? const Color(0xFF1E1E1E),
+                      border: Border.all(
+                        color: isMe ? Colors.orange.withOpacity(0.25) : Colors.blue.withOpacity(0.2),
+                        width: 1,
+                      ),
+                    ),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        Text('턴 ${d['turnNumber']}', style: TextStyle(
-                          fontWeight: FontWeight.bold, color: isMe ? Colors.orangeAccent : Colors.blueAccent)),
-                        const Spacer(),
-                        Text(isMe ? '나' : partner['nickname'], style: const TextStyle(fontSize: 12, color: Colors.white54)),
-                      ]),
-                      const SizedBox(height: 8),
-                      Text(d['content'] ?? '', style: const TextStyle(fontSize: 14, height: 1.5)),
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        if (d['reaction'] != null)
-                          Chip(label: Text(_reactionEmoji(d['reaction'])), backgroundColor: Colors.orange.withOpacity(0.2)),
-                        const Spacer(),
-                        if (!isMe && d['reaction'] == null)
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.emoji_emotions, size: 20),
-                            onSelected: (r) => _addReaction(d['diaryId'], r),
-                            itemBuilder: (_) => [
-                              const PopupMenuItem(value: 'HEART', child: Text('HEART')),
-                              const PopupMenuItem(value: 'SAD', child: Text('SAD')),
-                              const PopupMenuItem(value: 'HAPPY', child: Text('HAPPY')),
-                              const PopupMenuItem(value: 'FIRE', child: Text('FIRE')),
-                            ],
-                          ),
-                      ]),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                        decoration: BoxDecoration(
+                          color: isMe ? Colors.orange.withOpacity(0.08) : Colors.blue.withOpacity(0.06),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                        ),
+                        child: Row(children: [
+                          Icon(isMe ? Icons.edit_note : Icons.auto_stories,
+                            size: 16, color: isMe ? Colors.orange[300] : Colors.blue[300]),
+                          const SizedBox(width: 6),
+                          Text(writerName, style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600,
+                            color: isMe ? Colors.orange[300] : Colors.blue[300],
+                          )),
+                          const Spacer(),
+                          Text('$turnNum번째', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                          if (dateStr.isNotEmpty) ...[
+                            Text(' · $dateStr', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                          ],
+                        ]),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        child: Text(d['content'] ?? '',
+                          style: const TextStyle(fontSize: 14.5, height: 1.7, letterSpacing: 0.1)),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                        child: Row(children: [
+                          if (d['reaction'] != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(_reactionEmoji(d['reaction']),
+                                style: const TextStyle(fontSize: 16)),
+                            ),
+                          const Spacer(),
+                          if (!isMe && d['reaction'] == null)
+                            Row(children: ['HEART', 'HAPPY', 'SAD', 'FIRE'].map((r) =>
+                              GestureDetector(
+                                onTap: () => _addReaction(d['diaryId'], r),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: Text(_reactionEmoji(r), style: const TextStyle(fontSize: 20)),
+                                ),
+                              ),
+                            ).toList()),
+                        ]),
+                      ),
                     ]),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             )),
 
-        // 하단 액션 영역
+        // ── 작성 버튼 (내 차례일 때) ──
         if (status == 'ACTIVE' && isMyTurn)
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.grey[900], border: Border(top: BorderSide(color: Colors.grey[800]!))),
-            child: Column(children: [
-              TextField(
-                controller: contentCtrl,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: '교환일기를 작성해주세요 (200~1,000자)',
-                  border: const OutlineInputBorder(),
-                  suffixText: '${contentCtrl.text.length}자',
-                ),
-                onChanged: (_) => setState(() {}),
+            decoration: BoxDecoration(
+              color: Colors.grey[900],
+              border: Border(top: BorderSide(color: Colors.grey[800]!)),
+            ),
+            child: SizedBox(width: double.infinity, child: ElevatedButton.icon(
+              onPressed: () => _showWriteSheet(context),
+              icon: const Icon(Icons.edit),
+              label: Text('${currentTurn}번째 일기 쓰기'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              const SizedBox(height: 8),
-              SizedBox(width: double.infinity, child: ElevatedButton(
-                onPressed: _writeDiary,
-                child: const Text('교환일기 제출'),
-              )),
+            )),
+          ),
+
+        // ── 상대 차례 안내 ──
+        if (status == 'ACTIVE' && !isMyTurn)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.06),
+              border: Border(top: BorderSide(color: Colors.grey[800]!)),
+            ),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.hourglass_top, size: 16, color: Colors.blue[300]),
+              const SizedBox(width: 6),
+              Text('${partner['nickname']}님이 일기를 작성중이에요',
+                style: TextStyle(color: Colors.blue[300], fontSize: 13)),
             ]),
           ),
 
-        // 관계 확장 선택 (COMPLETED 상태)
+        // ── 관계 확장 선택 (COMPLETED 상태) ──
         if (status == 'COMPLETED' && room!['nextStepRequired'] == true)
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.green.withOpacity(0.1),
-              border: Border(top: BorderSide(color: Colors.green.withOpacity(0.3)))),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.06),
+              border: Border(top: BorderSide(color: Colors.green.withOpacity(0.2)))),
             child: Column(children: [
-              const Text('교환일기가 완료되었습니다! 다음 단계를 선택해주세요.',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.celebration, size: 18, color: Colors.greenAccent),
+                const SizedBox(width: 6),
+                const Text('교환일기 완주!', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent)),
+              ]),
+              const SizedBox(height: 4),
+              Text('다음 단계를 선택해주세요', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(child: ElevatedButton.icon(
                   onPressed: () => _chooseNextStep('CHAT'),
-                  icon: const Icon(Icons.chat),
+                  icon: const Icon(Icons.chat_bubble_outline, size: 18),
                   label: const Text('채팅 시작'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[700],
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                 )),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(child: OutlinedButton.icon(
                   onPressed: () => _chooseNextStep('CONTINUE'),
-                  icon: const Icon(Icons.swap_horiz),
+                  icon: const Icon(Icons.swap_horiz, size: 18),
                   label: const Text('교환 계속'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                 )),
               ]),
             ]),
@@ -2538,12 +4215,78 @@ class _ExchangeRoomScreenState extends State<ExchangeRoomScreen> {
     );
   }
 
+  void _showWriteSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+        child: StatefulBuilder(builder: (ctx, setSheetState) {
+          return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+            )),
+            const SizedBox(height: 14),
+            Row(children: [
+              Icon(Icons.edit_note, color: Colors.orange[300], size: 20),
+              const SizedBox(width: 6),
+              Text('${room!['currentTurn']}번째 교환일기', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ]),
+            const SizedBox(height: 12),
+            TextField(
+              controller: contentCtrl,
+              maxLines: 8,
+              autofocus: true,
+              style: const TextStyle(fontSize: 15, height: 1.6),
+              decoration: InputDecoration(
+                hintText: '오늘 하루를 돌아보며 솔직하게 적어보세요...',
+                hintStyle: TextStyle(color: Colors.grey[600]),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.orange[400]!),
+                ),
+              ),
+              onChanged: (_) => setSheetState(() {}),
+            ),
+            const SizedBox(height: 8),
+            Row(children: [
+              Text('${contentCtrl.text.length}자',
+                style: TextStyle(fontSize: 12, color: contentCtrl.text.length >= 200 ? Colors.green[400] : Colors.grey[500])),
+              Text(' / 200~1,000자', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+              const Spacer(),
+            ]),
+            const SizedBox(height: 12),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: contentCtrl.text.trim().length >= 200 ? () {
+                Navigator.pop(ctx);
+                _writeDiary();
+              } : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[700],
+                disabledBackgroundColor: Colors.grey[800],
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('일기 제출', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            )),
+          ]);
+        }),
+      ),
+    );
+  }
+
   String _reactionEmoji(String reaction) {
     switch (reaction) {
-      case 'HEART': return 'HEART';
-      case 'SAD': return 'SAD';
-      case 'HAPPY': return 'HAPPY';
-      case 'FIRE': return 'FIRE';
+      case 'HEART': return '❤️';
+      case 'SAD': return '😢';
+      case 'HAPPY': return '😊';
+      case 'FIRE': return '🔥';
       default: return reaction;
     }
   }
@@ -2737,11 +4480,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     setState(() => sending = true);
 
     try {
-      // REST로 메시지 전송 (DB 저장 + sequenceId 발급)
       await app.dio.post('${app.baseUrl}/api/chat-rooms/${widget.chatRoomId}/messages',
         data: {'content': content, 'type': 'TEXT'}, options: app.authHeaders);
       msgCtrl.clear();
-      // 항상 새로고침
       await _loadMessages();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(app.errMsg(e))));
@@ -2761,6 +4502,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             Text('성별: ${p['gender'] ?? '비공개'}'),
             Text('생년월일: ${p['birthDate'] ?? '비공개'}'),
             Text('지역: ${p['sido'] ?? '비공개'}'),
+            if (p['personalityKeywords'] != null && (p['personalityKeywords'] as List).isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('성격 태그:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Wrap(spacing: 4, children: (p['personalityKeywords'] as List).map((k) =>
+                Chip(label: Text(k is String ? k : k['label'] ?? '', style: const TextStyle(fontSize: 11)),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)).toList()),
+            ],
           ]),
           actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('닫기'))],
         ));
@@ -2786,7 +4534,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
   Future<void> _acceptCouple() async {
     try {
-      final res = await app.dio.post('${app.baseUrl}/api/chat-rooms/${widget.chatRoomId}/couple-accept',
+      await app.dio.post('${app.baseUrl}/api/chat-rooms/${widget.chatRoomId}/couple-accept',
         options: app.authHeaders);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('커플이 되었습니다!')));
@@ -2855,7 +4603,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         ],
       ),
       body: Column(children: [
-        // 메시지 목록
         Expanded(
           child: loading
             ? const Center(child: CircularProgressIndicator())
@@ -2901,7 +4648,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 ),
         ),
 
-        // 입력창
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(color: Colors.grey[900], border: Border(top: BorderSide(color: Colors.grey[800]!))),
