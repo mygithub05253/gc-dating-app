@@ -64,6 +64,16 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    title: '마케팅',
+    href: '/admin/marketing/campaigns',
+    icon: Megaphone,
+    requiredRole: 'ADMIN',
+    subItems: [
+      { title: '캠페인 목록', href: '/admin/marketing/campaigns' },
+      { title: '캠페인 만들기', href: '/admin/marketing/campaigns/new', requiredRole: 'ADMIN' },
+    ],
+  },
+  {
     title: '회원 관리',
     href: '/admin/members',
     icon: Users,

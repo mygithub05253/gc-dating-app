@@ -168,7 +168,13 @@ public enum ErrorCode {
     ADM_NOTIFICATION_NOT_FOUND("ADM024", HttpStatus.NOT_FOUND, "존재하지 않는 관리자 알림입니다."),
     ADM_NOTIFICATION_ALREADY_RESOLVED("ADM025", HttpStatus.CONFLICT, "이미 처리 완료된 알림입니다."),
     ADM_NOTIFICATION_ASSIGNEE_INACTIVE("ADM026", HttpStatus.UNPROCESSABLE_ENTITY, "비활성 관리자에게는 알림을 할당할 수 없습니다."),
-    ADM_NOTIFICATION_INVALID_CHANNEL("ADM027", HttpStatus.BAD_REQUEST, "알림 채널 값이 올바르지 않습니다.");
+    ADM_NOTIFICATION_INVALID_CHANNEL("ADM027", HttpStatus.BAD_REQUEST, "알림 채널 값이 올바르지 않습니다."),
+
+    // §11.1.3 일괄 공지/푸시 캠페인
+    ADM_CAMPAIGN_NOT_FOUND("ADM028", HttpStatus.NOT_FOUND, "존재하지 않는 캠페인입니다."),
+    ADM_CAMPAIGN_INVALID_STATUS("ADM029", HttpStatus.CONFLICT, "현재 상태에서 수행할 수 없는 작업입니다."),
+    ADM_CAMPAIGN_ALREADY_COMPLETED("ADM030", HttpStatus.CONFLICT, "이미 발송 완료된 캠페인입니다. 복사본을 생성하여 발송하세요."),
+    ADM_CAMPAIGN_INVALID_FILTER("ADM031", HttpStatus.BAD_REQUEST, "필터 조건이 올바르지 않습니다.");
 
     private final String code;
     private final HttpStatus status;
