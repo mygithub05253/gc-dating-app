@@ -80,6 +80,7 @@ public class AdminMemberService {
     }
 
     // ---------- §3.2 상세 (ADMIN+, 이메일 전체 + PII 감사 로그) ----------
+    @Transactional
     @PiiAccess(accessType = "EMAIL_FULL_VIEW", targetUserIdParam = "userId")
     public AdminMemberDetailResponse getDetailWithFullEmail(Long userId) {
         User user = loadUser(userId);

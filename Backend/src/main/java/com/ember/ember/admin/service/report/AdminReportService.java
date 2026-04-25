@@ -191,6 +191,7 @@ public class AdminReportService {
      * 실제 원문(일기/채팅 메시지)은 각 도메인 Repository 연계 필요 (후속 PR).
      * PiiAccess 로깅은 적용해 둠 — 개인정보 열람 추적.
      */
+    @Transactional
     @PiiAccess(accessType = "REPORT_CONTEXT_VIEW", targetUserIdParam = "reportId")
     public AdminReportContextResponse getContext(Long reportId) {
         Report report = loadReport(reportId);

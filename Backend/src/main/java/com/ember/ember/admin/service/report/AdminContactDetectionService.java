@@ -46,6 +46,7 @@ public class AdminContactDetectionService {
     }
 
     /** 감지 상세 조회 — 원문 맥락 포함이므로 PiiAccess 로깅. */
+    @Transactional
     @PiiAccess(accessType = "CONTACT_DETECTION_VIEW", targetUserIdParam = "detectionId")
     public AdminContactDetectionResponse getDetail(Long detectionId) {
         return AdminContactDetectionResponse.from(load(detectionId));
