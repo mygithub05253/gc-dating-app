@@ -87,9 +87,13 @@ public class AdminReportService {
             }
         }
 
+        // enum → String 변환: native query 에서 null enum 파라미터의 bytea 추론 오류 방지
+        String statusStr = status != null ? status.name() : null;
+        String reasonStr = reason != null ? reason.name() : null;
+
         LocalDateTime now = LocalDateTime.now();
         Page<Report> page = reportRepository.searchReports(
-                status, reason, minPriority, filter, assigneeId, slaOverdue, now, pageable);
+                statusStr, reasonStr, minPriority, filter, assigneeId, slaOverdue, now, pageable);
 
         return page.map(r -> AdminReportListItemResponse.from(
                 r, priorityCalculator.evaluateSlaStatus(r, now)));

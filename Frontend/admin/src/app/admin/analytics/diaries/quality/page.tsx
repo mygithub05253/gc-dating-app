@@ -70,31 +70,31 @@ export default function DiaryQualityPage() {
   // adapter: 100자 미만 비율 계산
   const aboveMinRatio = useMemo(() => {
     if (!data) return 0;
-    const totalCount = (data.buckets ?? []).reduce((s, b) => s + b.count, 0);
+    const bk = data.histogram ?? data.buckets ?? [];
+    const totalCount = bk.reduce((s, b) => s + b.count, 0);
     if (totalCount === 0) return 0;
-    const belowCount = (data.buckets ?? []).filter((b) => isBelowMin(b.range)).reduce((s, b) => s + b.count, 0);
+    const belowCount = bk.filter((b) => isBelowMin(b.range)).reduce((s, b) => s + b.count, 0);
     return Math.round(((totalCount - belowCount) / totalCount) * 100);
   }, [data]);
 
   // 첫 100자 이상 구간을 ReferenceLine 위치로 사용
   const firstAboveMinRange = useMemo(() => {
     if (!data) return null;
-    return (data.buckets ?? []).find((b) => !isBelowMin(b.range))?.range ?? null;
+    const bk = data.histogram ?? data.buckets ?? [];
+    return bk.find((b) => !isBelowMin(b.range))?.range ?? null;
   }, [data]);
 
   const handleDownload = () => {
     toast.success('CSV 다운로드는 백엔드 CSV 엔드포인트 준비 후 제공됩니다.');
   };
 
-  const avgLength = data?.stats?.mean !== null && data?.stats?.mean !== undefined
-    ? Math.round(data.stats.mean)
-    : 0;
-  const avgQuality = data?.quality?.avgCharactersPerDiary !== null && data?.quality?.avgCharactersPerDiary !== undefined
-    ? data.quality.avgCharactersPerDiary
-    : 0;
-  const successRate = data?.quality?.successRate !== null && data?.quality?.successRate !== undefined
-    ? Math.round(data.quality.successRate * 100)
-    : 0;
+  const stats = data?.lengthStats ?? data?.stats;
+  const quality = data?.qualityStats ?? data?.quality;
+  const buckets = data?.histogram ?? data?.buckets ?? [];
+
+  const avgLength = stats?.mean != null ? Math.round(stats.mean) : 0;
+  const avgQuality = quality?.avgCharactersPerDiary ?? 0;
+  const successRate = quality?.successRate != null ? Math.round(quality.successRate * 100) : 0;
 
   return (
     <div>
@@ -156,7 +156,7 @@ export default function DiaryQualityPage() {
             />
             <KpiCard
               title="P90 글자 수"
-              value={`${data.stats.p90 ?? 0}자`}
+              value={`${stats?.p90 ?? 0}자`}
               description="상위 10% 일기 길이"
               icon={Star}
               valueClassName="text-[#10b981]"
@@ -170,13 +170,13 @@ export default function DiaryQualityPage() {
             <KpiCard
               title="AI 분석 성공률"
               value={`${successRate}%`}
-              description={`완료 ${(data.quality?.completed ?? 0).toLocaleString()} / 실패 ${(data.quality?.failed ?? 0).toLocaleString()}`}
+              description={`완료 ${(quality?.completed ?? 0).toLocaleString()} / 실패 ${(quality?.failed ?? 0).toLocaleString()}`}
               icon={Award}
               valueClassName="text-[#f59e0b]"
             />
           </div>
 
-          {(data.buckets ?? []).length === 0 ? (
+          {buckets.length === 0 ? (
             <AnalyticsEmpty height={300} title="해당 기간 일기 데이터가 없습니다" />
           ) : (
             <>
@@ -190,7 +190,7 @@ export default function DiaryQualityPage() {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={data.buckets ?? []} margin={{ top: 12, right: 12, left: -8, bottom: 4 }}>
+                    <BarChart data={buckets} margin={{ top: 12, right: 12, left: -8, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                       <XAxis
                         dataKey="range"
@@ -257,15 +257,15 @@ export default function DiaryQualityPage() {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-md border border-border p-3">
                         <p className="text-xs text-muted-foreground">P50 (중앙값)</p>
-                        <p className="mt-1 text-xl font-bold tabular-nums">{data.stats.p50 ?? '—'}자</p>
+                        <p className="mt-1 text-xl font-bold tabular-nums">{stats?.p50 ?? '—'}자</p>
                       </div>
                       <div className="rounded-md border border-border p-3">
                         <p className="text-xs text-muted-foreground">P90</p>
-                        <p className="mt-1 text-xl font-bold tabular-nums">{data.stats.p90 ?? '—'}자</p>
+                        <p className="mt-1 text-xl font-bold tabular-nums">{stats?.p90 ?? '—'}자</p>
                       </div>
                       <div className="rounded-md border border-border p-3">
                         <p className="text-xs text-muted-foreground">P99</p>
-                        <p className="mt-1 text-xl font-bold tabular-nums">{data.stats.p99 ?? '—'}자</p>
+                        <p className="mt-1 text-xl font-bold tabular-nums">{stats?.p99 ?? '—'}자</p>
                       </div>
                       <div className="rounded-md border border-border p-3">
                         <p className="text-xs text-muted-foreground">평균</p>
@@ -273,11 +273,11 @@ export default function DiaryQualityPage() {
                       </div>
                       <div className="rounded-md border border-border p-3">
                         <p className="text-xs text-muted-foreground">최소</p>
-                        <p className="mt-1 text-xl font-bold tabular-nums">{data.stats.min ?? '—'}자</p>
+                        <p className="mt-1 text-xl font-bold tabular-nums">{stats?.min ?? '—'}자</p>
                       </div>
                       <div className="rounded-md border border-border p-3">
                         <p className="text-xs text-muted-foreground">최대</p>
-                        <p className="mt-1 text-xl font-bold tabular-nums">{data.stats.max ?? '—'}자</p>
+                        <p className="mt-1 text-xl font-bold tabular-nums">{stats?.max ?? '—'}자</p>
                       </div>
                     </div>
                   </CardContent>
@@ -300,19 +300,19 @@ export default function DiaryQualityPage() {
                         <TableRow>
                           <TableCell className="pl-4">총 분석 시도</TableCell>
                           <TableCell className="text-right pr-4 tabular-nums">
-                            {(data.quality?.total ?? 0).toLocaleString()}
+                            {(quality?.total ?? 0).toLocaleString()}
                           </TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="pl-4">성공</TableCell>
                           <TableCell className="text-right pr-4 tabular-nums text-success">
-                            {(data.quality?.completed ?? 0).toLocaleString()}
+                            {(quality?.completed ?? 0).toLocaleString()}
                           </TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="pl-4">실패</TableCell>
                           <TableCell className="text-right pr-4 tabular-nums text-destructive">
-                            {(data.quality?.failed ?? 0).toLocaleString()}
+                            {(quality?.failed ?? 0).toLocaleString()}
                           </TableCell>
                         </TableRow>
                         <TableRow>
@@ -349,7 +349,7 @@ export default function DiaryQualityPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {(data.buckets ?? []).map((b: LengthBucket) => (
+                        {buckets.map((b: LengthBucket) => (
                           <TableRow key={b.range}>
                             <TableCell className="pl-4 font-medium">
                               <span

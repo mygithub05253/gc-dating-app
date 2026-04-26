@@ -116,23 +116,22 @@ export default function TermsHistoryPage() {
     );
   }
 
-  // Transform TermsVersionHistory[] to TermsHistoryEntry[] for the table
-  // The API returns { version, date, change } — adapt as best we can
-  const historyEntries: TermsHistoryEntry[] = historyRaw.map((h: TermsVersionHistory, idx: number) => ({
-    id: idx + 1,
-    version: h.version,
-    termType: h.version.includes('AI') ? 'AI_TERMS' as TermType : 'USER_TERMS' as TermType,
-    changedBy: '-',
-    changedAt: h.date,
-    summary: h.change ?? '',
+  // 백엔드 TermsHistoryResponse: {id, adminId, adminName, action, targetId, detail, ipAddress, performedAt}
+  const historyEntries: TermsHistoryEntry[] = (historyRaw ?? []).map((h: any, idx: number) => ({
+    id: h.id ?? idx + 1,
+    version: h.action ?? '-',
+    termType: (h.action ?? '').includes('AI') ? 'AI_TERMS' as TermType : 'USER_TERMS' as TermType,
+    changedBy: h.adminName ?? '-',
+    changedAt: h.performedAt ?? h.date ?? '',
+    summary: h.detail ?? h.change ?? '',
   }));
 
   // 변경자 또는 요약 기준 검색
   const filtered = historyEntries.filter(
     (entry) =>
       !keyword ||
-      entry.changedBy.includes(keyword) ||
-      entry.summary.includes(keyword),
+      (entry.changedBy ?? '').includes(keyword) ||
+      (entry.summary ?? '').includes(keyword),
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
