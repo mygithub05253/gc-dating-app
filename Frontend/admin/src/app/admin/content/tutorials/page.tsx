@@ -47,19 +47,19 @@ const TUTORIAL_TYPE_COLORS: Record<TutorialType, string> = {
 const TUTORIAL_TYPES: TutorialType[] = ['ONBOARDING', 'EXCHANGE_DIARY', 'MATCHING', 'PROFILE'];
 
 interface TutorialFormData {
-  type: TutorialType;
   title: string;
-  description: string;
+  body: string;
+  imageUrl: string;
+  pageOrder: number;
   isActive: boolean;
-  version: string;
 }
 
 const INITIAL_FORM: TutorialFormData = {
-  type: 'ONBOARDING',
   title: '',
-  description: '',
+  body: '',
+  imageUrl: '',
+  pageOrder: 0,
   isActive: true,
-  version: '1.0',
 };
 
 export default function TutorialsPage() {
@@ -92,25 +92,25 @@ export default function TutorialsPage() {
   const openEdit = (tutorial: Tutorial) => {
     setEditingId(tutorial.id);
     setForm({
-      type: tutorial.type,
       title: tutorial.title,
-      description: tutorial.description,
+      body: tutorial.description ?? '',
+      imageUrl: '',
+      pageOrder: 0,
       isActive: tutorial.isActive,
-      version: tutorial.version,
     });
     setShowForm(true);
   };
 
   const handleSave = () => {
-    if (!form.title.trim() || !form.description.trim()) {
-      toast.error('제목과 설명을 모두 입력해주세요.');
+    if (!form.title.trim() || !form.body.trim()) {
+      toast.error('제목과 본문을 모두 입력해주세요.');
       return;
     }
 
     if (editingId !== null) {
-      updateMutation.mutate({ id: editingId, body: { ...form, steps: [] } });
+      updateMutation.mutate({ id: editingId, body: form });
     } else {
-      createMutation.mutate({ ...form, steps: [] });
+      createMutation.mutate(form);
     }
     setShowForm(false);
     setEditingId(null);
@@ -220,25 +220,20 @@ export default function TutorialsPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <label className="mb-1 block text-sm font-medium">유형</label>
-                <select
-                  className="w-full rounded-lg border p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  value={form.type}
-                  onChange={(e) => setForm({ ...form, type: e.target.value as TutorialType })}
-                >
-                  {TUTORIAL_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {TUTORIAL_TYPE_LABELS[t]}
-                    </option>
-                  ))}
-                </select>
+                <label className="mb-1 block text-sm font-medium">페이지 순서</label>
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={form.pageOrder}
+                  onChange={(e) => setForm({ ...form, pageOrder: Number(e.target.value) })}
+                />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">버전</label>
+                <label className="mb-1 block text-sm font-medium">이미지 URL</label>
                 <Input
-                  placeholder="1.0"
-                  value={form.version}
-                  onChange={(e) => setForm({ ...form, version: e.target.value })}
+                  placeholder="https://..."
+                  value={form.imageUrl}
+                  onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
                 />
               </div>
               <div className="flex items-end gap-2">
@@ -262,13 +257,13 @@ export default function TutorialsPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">설명</label>
+              <label className="mb-1 block text-sm font-medium">본문</label>
               <textarea
                 className="w-full rounded-lg border p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 rows={3}
-                placeholder="튜토리얼 설명을 입력하세요"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="튜토리얼 본문을 입력하세요"
+                value={form.body}
+                onChange={(e) => setForm({ ...form, body: e.target.value })}
               />
             </div>
             <div className="flex justify-end gap-2">

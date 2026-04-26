@@ -120,13 +120,12 @@ export interface ContactDetection {
   detectedAt: string;
 }
 
-// 기능명세서 기준 커서 기반 검색 파라미터 (API v2.1 확장)
+// Spring Pageable 기반 검색 파라미터 (API v2.1 확장)
 export interface ReportSearchParams {
   status?: ReportStatus;
   reason?: ReportReason;
-  sort?: 'priority' | 'createdAt' | 'sla';
-  cursor?: string;
-  limit?: number;
+  page?: number;
+  size?: number;
   dateFrom?: string;
   dateTo?: string;
   // v2.1 신규 필터

@@ -54,8 +54,8 @@ export default function ReportsPage() {
     assignedTo: assignmentFilter === 'UNASSIGNED' ? ('unassigned' as const) : assignmentFilter === 'ME' ? ('me' as const) : undefined,
     slaOverdue: slaOverdueOnly || undefined,
     minPriority: minPriority > 0 ? minPriority : undefined,
-    sort: 'priority' as const,
-    limit: 50,
+    page: 0,
+    size: 50,
   }), [statusFilter, reasonFilter, assignmentFilter, slaOverdueOnly, minPriority]);
 
   const { data, isLoading, isError, error, refetch } = useReportList(searchParams);

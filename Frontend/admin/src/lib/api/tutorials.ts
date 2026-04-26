@@ -3,17 +3,11 @@ import type { ApiResponse, PageResponse } from './types';
 import type { Tutorial } from '@/types/content';
 
 export interface TutorialCreateRequest {
-  type: string;
   title: string;
-  description: string;
+  body: string;
+  imageUrl?: string;
+  pageOrder: number;
   isActive: boolean;
-  steps: {
-    stepOrder: number;
-    title: string;
-    description: string;
-    imageUrl: string;
-  }[];
-  version?: string;
 }
 
 export interface TutorialSearchParams {

@@ -23,7 +23,7 @@ export const termsApi = {
   delete: (id: number) =>
     apiClient.delete<ApiResponse<null>>(`/api/admin/terms/${id}`),
 
-  // 약관 버전 이력 조회
-  getHistory: () =>
-    apiClient.get<ApiResponse<TermsVersionHistory[]>>('/api/admin/terms/history'),
+  // 약관 버전 이력 조회 (Page 응답)
+  getHistory: (params?: { page?: number; size?: number }) =>
+    apiClient.get<ApiResponse<PageResponse<TermsVersionHistory>>>('/api/admin/terms/history', { params }),
 };

@@ -86,7 +86,8 @@ export default function TermsHistoryPage() {
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(0); // 0-based
 
-  const { data: historyRaw, isLoading, isError } = useAdminTermsHistory();
+  const { data: historyPageData, isLoading, isError } = useAdminTermsHistory();
+  const historyRaw: TermsVersionHistory[] = historyPageData?.content ?? (Array.isArray(historyPageData) ? historyPageData : []);
 
   // SUPER_ADMIN 권한 가드
   if (!hasPermission('SUPER_ADMIN')) {
@@ -117,13 +118,13 @@ export default function TermsHistoryPage() {
 
   // Transform TermsVersionHistory[] to TermsHistoryEntry[] for the table
   // The API returns { version, date, change } — adapt as best we can
-  const historyEntries: TermsHistoryEntry[] = (historyRaw ?? []).map((h: TermsVersionHistory, idx: number) => ({
+  const historyEntries: TermsHistoryEntry[] = historyRaw.map((h: TermsVersionHistory, idx: number) => ({
     id: idx + 1,
     version: h.version,
     termType: h.version.includes('AI') ? 'AI_TERMS' as TermType : 'USER_TERMS' as TermType,
     changedBy: '-',
     changedAt: h.date,
-    summary: h.change,
+    summary: h.change ?? '',
   }));
 
   // 변경자 또는 요약 기준 검색

@@ -55,14 +55,11 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AIABTestPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
-  const { data: rawTests, isLoading, refetch } = useQuery<ABTestResult[]>({
+  const { data: rawData, isLoading, refetch } = useQuery<{ active?: boolean; results?: ABTestResult[] } | ABTestResult[]>({
     queryKey: ['ab-test-results'],
-    queryFn: () => aiApi.getABTestResults().then(r => {
-      const d = r.data.data;
-      return Array.isArray(d) ? d : [];
-    }),
+    queryFn: () => aiApi.getABTestResults().then(r => r.data.data),
   });
-  const tests: ABTestResult[] = Array.isArray(rawTests) ? rawTests : [];
+  const tests: ABTestResult[] = Array.isArray(rawData) ? rawData : (rawData?.results ?? []);
 
   const handleRefresh = () => {
     refetch().then(() => toast.success('A/B 테스트 목록을 새로고침했습니다.'));

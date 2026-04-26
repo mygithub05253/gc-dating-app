@@ -32,7 +32,7 @@ export default function TermsManagementPage() {
   const { data: historyData } = useAdminTermsHistory();
 
   const terms: Terms[] = pageData?.content ?? [];
-  const termHistory: TermsVersionHistory[] = historyData ?? [];
+  const termHistory: TermsVersionHistory[] = historyData?.content ?? (Array.isArray(historyData) ? historyData : []);
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-terms-list'] });

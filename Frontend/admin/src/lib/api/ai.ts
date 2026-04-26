@@ -22,9 +22,9 @@ export const aiApi = {
   reanalyze: (diaryId: number) =>
     apiClient.post<ApiResponse<null>>(`/api/admin/ai/reanalyze/${diaryId}`),
 
-  // A/B 테스트 결과 조회
+  // A/B 테스트 결과 조회 (BE 응답: { active, results[] })
   getABTestResults: (params?: { testId?: number; startDate?: string; endDate?: string }) =>
-    apiClient.get<ApiResponse<ABTestResult[]>>('/api/admin/ai/ab-test/results', { params }),
+    apiClient.get<ApiResponse<{ active: boolean; results: ABTestResult[] }>>('/api/admin/ai/ab-test/results', { params }),
 
   // A/B 테스트 가중치 설정
   configABTest: (data: ABTestWeightConfig) =>
