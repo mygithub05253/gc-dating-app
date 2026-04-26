@@ -16,7 +16,7 @@ public interface TutorialPageRepository extends JpaRepository<TutorialPage, Long
     /** 관리자 §23 튜토리얼 목록 — isActive 필터. */
     @Query("""
             SELECT p FROM TutorialPage p
-            WHERE (:isActive IS NULL OR p.isActive = :isActive)
+            WHERE (COALESCE(:isActive, NULL) IS NULL OR p.isActive = :isActive)
             ORDER BY p.pageOrder ASC
             """)
     Page<TutorialPage> searchForAdmin(

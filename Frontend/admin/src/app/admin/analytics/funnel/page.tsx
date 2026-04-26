@@ -158,7 +158,7 @@ export default function FunnelAnalysisPage() {
                     {STAGE_ICONS[stageKeys[index]]}
                   </div>
                   <span className="mt-2 text-sm font-medium">{stage.name}</span>
-                  <span className="text-xl font-bold">{stage.value.toLocaleString()}</span>
+                  <span className="text-xl font-bold">{(stage.value ?? 0).toLocaleString()}</span>
                   {funnelData[0].value > 0 && (
                     <span className="text-xs text-muted-foreground">
                       {((stage.value / funnelData[0].value) * 100).toFixed(1)}%

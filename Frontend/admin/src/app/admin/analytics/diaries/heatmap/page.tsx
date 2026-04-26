@@ -406,7 +406,7 @@ export default function DiaryHeatmapPage() {
                             <TableCell className="pl-4 font-medium text-sm">{row.group}</TableCell>
                             <TableCell className="text-xs text-muted-foreground">{row.range}</TableCell>
                             <TableCell className="text-right font-mono tabular-nums text-sm">
-                              {row.count.toLocaleString()}
+                              {(row.count ?? 0).toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right pr-4">
                               <div className="flex items-center justify-end gap-1.5">

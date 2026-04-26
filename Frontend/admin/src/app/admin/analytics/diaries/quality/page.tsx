@@ -86,13 +86,13 @@ export default function DiaryQualityPage() {
     toast.success('CSV 다운로드는 백엔드 CSV 엔드포인트 준비 후 제공됩니다.');
   };
 
-  const avgLength = data?.stats.mean !== null && data?.stats.mean !== undefined
+  const avgLength = data?.stats?.mean !== null && data?.stats?.mean !== undefined
     ? Math.round(data.stats.mean)
     : 0;
-  const avgQuality = data?.quality.avgCharactersPerDiary !== null && data?.quality.avgCharactersPerDiary !== undefined
+  const avgQuality = data?.quality?.avgCharactersPerDiary !== null && data?.quality?.avgCharactersPerDiary !== undefined
     ? data.quality.avgCharactersPerDiary
     : 0;
-  const successRate = data?.quality.successRate !== null && data?.quality.successRate !== undefined
+  const successRate = data?.quality?.successRate !== null && data?.quality?.successRate !== undefined
     ? Math.round(data.quality.successRate * 100)
     : 0;
 
@@ -170,7 +170,7 @@ export default function DiaryQualityPage() {
             <KpiCard
               title="AI 분석 성공률"
               value={`${successRate}%`}
-              description={`완료 ${data.quality.completed.toLocaleString()} / 실패 ${data.quality.failed.toLocaleString()}`}
+              description={`완료 ${(data.quality?.completed ?? 0).toLocaleString()} / 실패 ${(data.quality?.failed ?? 0).toLocaleString()}`}
               icon={Award}
               valueClassName="text-[#f59e0b]"
             />
@@ -300,19 +300,19 @@ export default function DiaryQualityPage() {
                         <TableRow>
                           <TableCell className="pl-4">총 분석 시도</TableCell>
                           <TableCell className="text-right pr-4 tabular-nums">
-                            {data.quality.total.toLocaleString()}
+                            {(data.quality?.total ?? 0).toLocaleString()}
                           </TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="pl-4">성공</TableCell>
                           <TableCell className="text-right pr-4 tabular-nums text-success">
-                            {data.quality.completed.toLocaleString()}
+                            {(data.quality?.completed ?? 0).toLocaleString()}
                           </TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="pl-4">실패</TableCell>
                           <TableCell className="text-right pr-4 tabular-nums text-destructive">
-                            {data.quality.failed.toLocaleString()}
+                            {(data.quality?.failed ?? 0).toLocaleString()}
                           </TableCell>
                         </TableRow>
                         <TableRow>
@@ -359,7 +359,7 @@ export default function DiaryQualityPage() {
                               <span className="ml-2">{b.range}</span>
                             </TableCell>
                             <TableCell className="text-right font-mono tabular-nums text-sm">
-                              {b.count.toLocaleString()}
+                              {(b.count ?? 0).toLocaleString()}
                             </TableCell>
                             <TableCell className="text-right pr-4 tabular-nums text-xs">
                               {((b.share ?? 0) * 100).toFixed(1)}%

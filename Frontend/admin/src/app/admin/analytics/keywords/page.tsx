@@ -182,13 +182,13 @@ export default function KeywordsAnalysisPage() {
             <KpiCard
               title="Top 1 키워드"
               value={rows[0]?.keyword ?? '—'}
-              description={rows[0] ? `빈도 ${rows[0].frequency.toLocaleString()}회` : '데이터 없음'}
+              description={rows[0] ? `빈도 ${(rows[0].frequency ?? 0).toLocaleString()}회` : '데이터 없음'}
               icon={TrendingUp}
               valueClassName="text-primary"
             />
             <KpiCard
               title="총 사용 횟수"
-              value={data.totalCount.toLocaleString()}
+              value={(data.totalCount ?? 0).toLocaleString()}
               description="기간 내 전체 키워드 사용 합계"
               icon={Repeat}
             />
@@ -388,7 +388,7 @@ export default function KeywordsAnalysisPage() {
                             {item.category}
                           </Badge>
                         </span>
-                        <span className="text-right tabular-nums">{item.frequency.toLocaleString()}</span>
+                        <span className="text-right tabular-nums">{(item.frequency ?? 0).toLocaleString()}</span>
                         <span className="text-right tabular-nums font-medium text-muted-foreground">
                           {(item.share * 100).toFixed(1)}%
                         </span>

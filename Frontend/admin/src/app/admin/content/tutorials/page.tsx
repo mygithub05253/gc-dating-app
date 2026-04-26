@@ -356,7 +356,7 @@ export default function TutorialsPage() {
                           {tutorial.isActive ? '활성' : '비활성'}
                         </Badge>
                         <Badge variant="outline">v{tutorial.version}</Badge>
-                        <Badge variant="outline">{tutorial.steps.length}단계</Badge>
+                        <Badge variant="outline">{(tutorial.steps ?? []).length}단계</Badge>
                       </div>
                       <h4 className="mt-2 font-medium">{tutorial.title}</h4>
                       <p className="mt-1 text-sm text-muted-foreground">
