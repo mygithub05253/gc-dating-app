@@ -265,9 +265,12 @@ export interface QualityStats {
 
 export interface DiaryLengthQualityResponse {
   period: AnalyticsPeriod;
-  stats: LengthStats;
-  buckets: LengthBucket[];
-  quality: QualityStats;
+  stats?: LengthStats;
+  lengthStats?: LengthStats;
+  buckets?: LengthBucket[];
+  histogram?: LengthBucket[];
+  quality?: QualityStats;
+  qualityStats?: QualityStats;
   meta: AnalyticsBaseMeta;
 }
 
