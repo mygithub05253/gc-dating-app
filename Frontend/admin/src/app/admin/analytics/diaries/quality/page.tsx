@@ -39,7 +39,8 @@ import type { DiaryLengthQualityResponse, LengthBucket } from '@/types/analytics
 // adapter: BE buckets → 차트 데이터
 // 100자 미만 구간 식별 (range 시작값 < 100)
 // ─────────────────────────────────────────────
-function isBelowMin(range: string): boolean {
+function isBelowMin(range: string | undefined): boolean {
+  if (!range) return false;
   const m = range.match(/^(\d+)/);
   if (!m) return false;
   const start = parseInt(m[1], 10);
