@@ -50,44 +50,43 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
 
     // ── 관리자 대시보드용 (§5.1~5.7) ────────────────────────────────────────
     /**
-     * 관리자 신고 목록 조회.
-     * status/reason/assignedTo/minPriority/slaOverdue 필터 + priority/sla 정렬.
-     *
-     * 정렬은 Pageable 의 Sort 로 전달하지 않고 JPQL 고정 (priority DESC, slaDeadline ASC).
-     * sort 파라미터 분기는 Service 에서 별도 쿼리로 처리해도 되지만, 현 Phase 는 priority 고정.
+     * 관리자 신고 목록 조회 — native query.
+     * JPQL 에서 null enum 파라미터가 bytea 로 추론되는 Hibernate 버그를 회피하기 위해
+     * native SQL + CAST(:param AS varchar) 패턴을 사용한다.
+     * Service 에서 enum.name() 문자열로 변환하여 전달해야 한다.
      */
     @Query(value = """
-            SELECT r FROM Report r
-            LEFT JOIN FETCH r.assignedTo assigned
-            LEFT JOIN FETCH r.resolvedBy resolver
-            WHERE (:status IS NULL OR r.status = :status)
-              AND (:reason IS NULL OR r.reason = :reason)
-              AND (CAST(:minPriority AS integer) IS NULL OR r.priorityScore >= :minPriority)
+            SELECT r.* FROM reports r
+            LEFT JOIN admin_accounts assigned ON assigned.id = r.assigned_to
+            WHERE (CAST(:status AS varchar) IS NULL OR r.status = CAST(:status AS varchar))
+              AND (CAST(:reason AS varchar) IS NULL OR r.reason = CAST(:reason AS varchar))
+              AND (CAST(:minPriority AS integer) IS NULL OR r.priority_score >= CAST(:minPriority AS integer))
               AND (
                     :assigneeFilter = 'ANY'
-                 OR (:assigneeFilter = 'UNASSIGNED' AND r.assignedTo IS NULL)
-                 OR (:assigneeFilter = 'ME' AND r.assignedTo.id = :assigneeId)
-                 OR (:assigneeFilter = 'SPECIFIC' AND r.assignedTo.id = :assigneeId)
+                 OR (:assigneeFilter = 'UNASSIGNED' AND r.assigned_to IS NULL)
+                 OR (:assigneeFilter = 'ME' AND r.assigned_to = CAST(:assigneeId AS bigint))
+                 OR (:assigneeFilter = 'SPECIFIC' AND r.assigned_to = CAST(:assigneeId AS bigint))
               )
-              AND (:slaOverdue = FALSE OR (r.slaDeadline IS NOT NULL AND r.slaDeadline < :now))
-            ORDER BY r.priorityScore DESC, r.slaDeadline ASC, r.id DESC
+              AND (CAST(:slaOverdue AS boolean) = FALSE OR (r.sla_deadline IS NOT NULL AND r.sla_deadline < CAST(:now AS timestamp)))
+            ORDER BY r.priority_score DESC NULLS LAST, r.sla_deadline ASC NULLS LAST, r.id DESC
             """,
             countQuery = """
-            SELECT COUNT(r) FROM Report r
-            WHERE (:status IS NULL OR r.status = :status)
-              AND (:reason IS NULL OR r.reason = :reason)
-              AND (CAST(:minPriority AS integer) IS NULL OR r.priorityScore >= :minPriority)
+            SELECT COUNT(*) FROM reports r
+            WHERE (CAST(:status AS varchar) IS NULL OR r.status = CAST(:status AS varchar))
+              AND (CAST(:reason AS varchar) IS NULL OR r.reason = CAST(:reason AS varchar))
+              AND (CAST(:minPriority AS integer) IS NULL OR r.priority_score >= CAST(:minPriority AS integer))
               AND (
                     :assigneeFilter = 'ANY'
-                 OR (:assigneeFilter = 'UNASSIGNED' AND r.assignedTo IS NULL)
-                 OR (:assigneeFilter = 'ME' AND r.assignedTo.id = :assigneeId)
-                 OR (:assigneeFilter = 'SPECIFIC' AND r.assignedTo.id = :assigneeId)
+                 OR (:assigneeFilter = 'UNASSIGNED' AND r.assigned_to IS NULL)
+                 OR (:assigneeFilter = 'ME' AND r.assigned_to = CAST(:assigneeId AS bigint))
+                 OR (:assigneeFilter = 'SPECIFIC' AND r.assigned_to = CAST(:assigneeId AS bigint))
               )
-              AND (:slaOverdue = FALSE OR (r.slaDeadline IS NOT NULL AND r.slaDeadline < :now))
-            """)
+              AND (CAST(:slaOverdue AS boolean) = FALSE OR (r.sla_deadline IS NOT NULL AND r.sla_deadline < CAST(:now AS timestamp)))
+            """,
+            nativeQuery = true)
     Page<Report> searchReports(
-            @Param("status") Report.ReportStatus status,
-            @Param("reason") Report.ReportReason reason,
+            @Param("status") String status,
+            @Param("reason") String reason,
             @Param("minPriority") Integer minPriority,
             @Param("assigneeFilter") String assigneeFilter,
             @Param("assigneeId") Long assigneeId,
@@ -96,9 +95,11 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             Pageable pageable
     );
 
-    /** PENDING/IN_REVIEW 상태의 신고 전체 (SLA summary 계산용). */
+    /** PENDING/IN_REVIEW 상태의 신고 전체 (SLA summary 계산용). JOIN FETCH 로 N+1 방지. */
     @Query("""
             SELECT r FROM Report r
+            JOIN FETCH r.targetUser
+            JOIN FETCH r.reporter
             WHERE r.status IN (com.ember.ember.report.domain.Report.ReportStatus.PENDING,
                                com.ember.ember.report.domain.Report.ReportStatus.IN_REVIEW)
             """)
@@ -117,9 +118,11 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
             Pageable pageable
     );
 
-    /** 신고 패턴 분석 §5.12 — 기간 내 접수된 전체 신고. */
+    /** 신고 패턴 분석 §5.12 — 기간 내 접수된 전체 신고. JOIN FETCH 로 N+1 방지. */
     @Query("""
             SELECT r FROM Report r
+            JOIN FETCH r.targetUser
+            JOIN FETCH r.reporter
             WHERE r.createdAt >= :from
               AND r.createdAt <  :to
             """)
