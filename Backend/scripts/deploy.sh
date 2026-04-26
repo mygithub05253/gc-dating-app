@@ -92,7 +92,7 @@ fi
 if [ "$BACKEND_CHANGED" -gt 0 ]; then
   log "Backend 변경 감지 → 리빌드..."
   docker compose stop backend
-  docker compose build --no-cache backend
+  docker compose build backend
   docker compose up -d backend
 else
   log "Backend 변경 없음 → 스킵 (기존 컨테이너 유지)"
