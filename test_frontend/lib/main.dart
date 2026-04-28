@@ -306,6 +306,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: const Text('Dev 로그인 (맑은바다)', style: TextStyle(fontSize: 14)),
                 ),
               ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: loading ? null : _devRegister,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('신규 가입 시뮬레이션', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                ),
+              ),
               if (message != null) ...[
                 const SizedBox(height: 16),
                 Text(message!, style: TextStyle(
@@ -317,6 +330,24 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _devRegister() async {
+    setState(() { loading = true; message = null; });
+    final app = AppState();
+    try {
+      final res = await app.dio.post('${app.baseUrl}/api/dev/register');
+      app.accessToken = res.data['accessToken'];
+      app.userId = res.data['userId'];
+      setState(() => message = '신규 유저 생성! (userId=${app.userId})');
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (_) => const ConsentScreen()));
+      }
+    } catch (e) {
+      setState(() { message = app.errMsg(e); loading = false; });
+    }
   }
 
   Future<void> _devLogin(int userId) async {

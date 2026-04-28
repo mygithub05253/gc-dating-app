@@ -7,6 +7,8 @@ import com.ember.ember.exchange.repository.ExchangeRoomRepository;
 import com.ember.ember.global.security.jwt.JwtTokenProvider;
 import com.ember.ember.messaging.event.AiAnalysisResultEvent;
 import com.ember.ember.messaging.event.AiAnalysisResultType;
+import com.ember.ember.user.domain.User;
+import com.ember.ember.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -31,12 +33,33 @@ public class DevController {
     private final DiaryRepository diaryRepository;
     private final RabbitTemplate rabbitTemplate;
     private final StringRedisTemplate stringRedisTemplate;
+    private final UserRepository userRepository;
 
     /** 테스트 토큰 발급 */
     @GetMapping("/api/dev/token")
     public Map<String, String> issueTestToken(@RequestParam Long userId) {
         String accessToken = jwtTokenProvider.createAccessToken(userId, "ROLE_USER");
         return Map.of("accessToken", accessToken);
+    }
+
+    /** 신규 유저 생성 (온보딩 테스트용) — ROLE_GUEST 상태로 생성 후 토큰 반환 */
+    @PostMapping("/api/dev/register")
+    @Transactional
+    public Map<String, Object> registerTestUser() {
+        User user = User.builder()
+                .email("test_" + System.currentTimeMillis() + "@dev.local")
+                .status(User.UserStatus.ACTIVE)
+                .role(User.UserRole.ROLE_GUEST)
+                .build();
+        userRepository.save(user);
+
+        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), "ROLE_GUEST");
+        return Map.of(
+                "userId", user.getId(),
+                "accessToken", accessToken,
+                "role", "ROLE_GUEST",
+                "message", "신규 유저가 생성되었습니다. 약관 동의부터 시작하세요."
+        );
     }
 
     /** 교환일기 방 deadlineAt 강제 변경 (테스트용: 만료 시간 조절) */
