@@ -21,7 +21,8 @@ public class ExploreResponse {
         private Long diaryId;
         private Long authorId;
         private String ageGroupLabel;
-        private String region;
+        private String sido;
+        private String sigungu;
         private String previewContent;
         private String category;
         private String createdAt;
