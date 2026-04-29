@@ -61,7 +61,7 @@ public class MyPageService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        // 키워드 존�� 여부 검증
+        // 키워드 존재 여부 검증
         List<Keyword> keywords = keywordRepository.findAllById(keywordIds);
         if (keywords.size() != keywordIds.size()) {
             throw new BusinessException(ErrorCode.KEYWORD_NOT_FOUND);

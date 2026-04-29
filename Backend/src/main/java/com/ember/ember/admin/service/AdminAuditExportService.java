@@ -46,7 +46,7 @@ public class AdminAuditExportService {
         String normalizedAction = (action == null || action.isBlank()) ? null : action.trim();
         String normalizedTarget = (targetType == null || targetType.isBlank()) ? null : targetType.trim();
 
-        // 건수 확인 (10,000건 초과 시 ���러)
+        // 건수 확인 (10,000건 초과 시 에러)
         Page<AdminAuditLog> page = adminAuditLogRepository.searchAuditLogs(
                 adminId, normalizedAction, normalizedTarget,
                 startAt, endAt, null,

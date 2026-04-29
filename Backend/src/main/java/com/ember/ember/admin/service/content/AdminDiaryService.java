@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 관리자 일기 관리 서비스 — §6 콘텐��� 관리.
+ * 관리자 일기 관리 서비스 — §6 콘텐츠 관리.
  */
 @Slf4j
 @Service

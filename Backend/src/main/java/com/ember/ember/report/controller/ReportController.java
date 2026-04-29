@@ -23,7 +23,7 @@ public class ReportController {
     private final ReportService reportService;
     private final BlockService blockService;
 
-    /** 8.1 사용자 신고 ��수 */
+    /** 8.1 사용자 신고 접수 */
     @PostMapping("/api/users/{targetUserId}/report")
     @Operation(summary = "사용자 신고", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<ReportResponse>> reportUser(
@@ -37,7 +37,7 @@ public class ReportController {
 
     /** 8.2 사용자 차단 */
     @PostMapping("/api/users/{targetUserId}/block")
-    @Operation(summary = "사���자 차단 (연쇄 종료 ��함)", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "사용자 차단 (연쇄 종료 포함)", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<BlockResponse>> blockUser(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long targetUserId) {
