@@ -64,7 +64,7 @@ public class NoticeSupportService {
                 Object.class);
     }
 
-    /** 미읽음 ���지 수 조회 */
+    /** 미읽음 공지 수 조회 */
     public int getUnreadNoticeCount(Long userId) {
         return noticeRepository.countUnreadByUserId(userId);
     }

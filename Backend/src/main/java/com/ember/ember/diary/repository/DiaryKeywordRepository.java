@@ -19,7 +19,7 @@ public interface DiaryKeywordRepository extends JpaRepository<DiaryKeyword, Long
     /** 여러 일기의 키워드 배치 조회 (N+1 방지) */
     List<DiaryKeyword> findByDiaryIdIn(List<Long> diaryIds);
 
-    /** 특정 일기의 ���워드 전체 삭제 */
+    /** 특정 일기의 키워드 전체 삭제 */
     void deleteByDiaryId(Long diaryId);
 
     /** 특정 사용자의 전체 분석 키워드 조회 (AI 프로필용) */

@@ -28,12 +28,17 @@ public class MatchingController {
 
     /** 5.1 일기 탐색 (Pull 방식) */
     @GetMapping("/api/diaries/explore")
-    @Operation(summary = "일기 탐색 (커서 기반 페이징)", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "일기 탐색 (커서 기반 페이징, 정렬/필터 지원)", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<ExploreResponse>> explore(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestParam(required = false) Long cursor) {
+            @RequestParam(required = false) Long cursor,
+            @RequestParam(defaultValue = "latest") String sort,
+            @RequestParam(required = false) String sido,
+            @RequestParam(required = false) String sigungu,
+            @RequestParam(required = false) String ageGroup,
+            @RequestParam(defaultValue = "true") boolean keywordFilter) {
         return ResponseEntity.ok(ApiResponse.success(
-                exploreService.explore(userDetails.getUserId(), cursor)));
+                exploreService.explore(userDetails.getUserId(), cursor, sort, sido, sigungu, ageGroup, keywordFilter)));
     }
 
     /** 5.1-2 탐색 일기 상세 */

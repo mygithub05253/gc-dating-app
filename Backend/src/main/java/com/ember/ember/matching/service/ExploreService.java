@@ -56,9 +56,9 @@ public class ExploreService {
     private final SimilarityService similarityService;
 
     /**
-     * 5.1 일기 탐색 (Pull 방식) — 커서 기반 페이징
+     * 5.1 일기 탐색 (Pull 방식) — 커서 기반 페이징, 정렬/필터 지원
      */
-    public ExploreResponse explore(Long userId, Long cursor) {
+    public ExploreResponse explore(Long userId, Long cursor, String sort, String sido, String sigungu, String ageGroup, boolean keywordFilter) {
         // 매칭 조건 체크: 누적 일기 3개 이상
         long diaryCount = diaryRepository.countByUserId(userId);
         if (diaryCount < MIN_DIARY_COUNT) {
@@ -79,22 +79,51 @@ public class ExploreService {
             diaries = diaryRepository.findExploreWithCursor(userId, excludeUserIds, cursor, PageRequest.of(0, EXPLORE_PAGE_SIZE + 1));
         }
 
+        // 지역 필터 (시/도 + 시/군/구)
+        if (sido != null && !sido.isBlank()) {
+            diaries = diaries.stream()
+                    .filter(d -> sido.equals(d.getUser().getSido()))
+                    .collect(Collectors.toList());
+        }
+        if (sigungu != null && !sigungu.isBlank()) {
+            diaries = diaries.stream()
+                    .filter(d -> sigungu.equals(d.getUser().getSigungu()))
+                    .collect(Collectors.toList());
+        }
+
+        // 나이대 필터
+        if (ageGroup != null && !ageGroup.isBlank()) {
+            diaries = diaries.stream()
+                    .filter(d -> ageGroup.equals(getAgeGroupLabel(d.getUser().getBirthDate())))
+                    .collect(Collectors.toList());
+        }
+
         boolean hasNext = diaries.size() > EXPLORE_PAGE_SIZE;
         if (hasNext) {
             diaries = diaries.subList(0, EXPLORE_PAGE_SIZE);
         }
 
+        // 카드에 키워드 표시를 위해 일기 ID 배치 조회
+        List<Long> diaryIds = diaries.stream().map(Diary::getId).collect(Collectors.toList());
+        Map<Long, List<DiaryKeyword>> keywordMap = diaryIds.isEmpty()
+                ? Map.of()
+                : diaryKeywordRepository.findByDiaryIdIn(diaryIds).stream()
+                    .collect(Collectors.groupingBy(k -> k.getDiary().getId()));
+
         List<ExploreResponse.ExploreDiaryItem> items = diaries.stream()
-                .map(d -> toExploreItem(userId, d))
+                .map(d -> toExploreItem(userId, d, keywordMap.getOrDefault(d.getId(), List.of())))
                 .collect(Collectors.toList());
 
         Long nextCursor = hasNext && !items.isEmpty()
                 ? diaries.get(diaries.size() - 1).getId()
                 : null;
 
+        // 추천순 요청이지만 AI 미연동 → 최신순 폴백
+        String actualSort = "recommended".equals(sort) ? "latest" : sort;
+
         String guidanceMessage = items.isEmpty() ? "새로운 일기가 올라오면 알려드릴게요!" : null;
 
-        return new ExploreResponse(items, nextCursor, hasNext, guidanceMessage);
+        return new ExploreResponse(items, nextCursor, hasNext, guidanceMessage, actualSort);
     }
 
     /**
@@ -411,11 +440,25 @@ public class ExploreService {
     // Private 헬퍼
     // ──────────────────────────────────────────────────────────────────
 
-    private ExploreResponse.ExploreDiaryItem toExploreItem(Long userId, Diary diary) {
+    private ExploreResponse.ExploreDiaryItem toExploreItem(Long userId, Diary diary, List<DiaryKeyword> keywords) {
         User author = diary.getUser();
         String previewContent = diary.getContent().length() > 80
                 ? diary.getContent().substring(0, 80) + "..."
                 : diary.getContent();
+
+        // 성격 키워드 상위 3개 (감정 + 라이프스타일)
+        List<String> personalityKeywords = keywords.stream()
+                .filter(k -> k.getTagType() == DiaryKeyword.TagType.EMOTION || k.getTagType() == DiaryKeyword.TagType.LIFESTYLE)
+                .map(DiaryKeyword::getLabel)
+                .limit(3)
+                .collect(Collectors.toList());
+
+        // 분위기 태그 (톤)
+        List<String> moodTags = keywords.stream()
+                .filter(k -> k.getTagType() == DiaryKeyword.TagType.TONE)
+                .map(DiaryKeyword::getLabel)
+                .limit(2)
+                .collect(Collectors.toList());
 
         return ExploreResponse.ExploreDiaryItem.builder()
                 .diaryId(diary.getId())
@@ -426,6 +469,8 @@ public class ExploreService {
                 .category(diary.getCategory())
                 .createdAt(diary.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .similarityBadge(similarityService.getSimilarityBadge(userId, author.getId()))
+                .personalityKeywords(personalityKeywords)
+                .moodTags(moodTags)
                 .build();
     }
 

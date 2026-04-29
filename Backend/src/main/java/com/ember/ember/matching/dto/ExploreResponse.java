@@ -12,6 +12,7 @@ public class ExploreResponse {
     private Long nextCursor;
     private boolean hasNext;
     private String guidanceMessage;
+    private String currentSort;
 
     @Getter
     @Builder
@@ -25,5 +26,7 @@ public class ExploreResponse {
         private String category;
         private String createdAt;
         private String similarityBadge;
+        private List<String> personalityKeywords;
+        private List<String> moodTags;
     }
 }

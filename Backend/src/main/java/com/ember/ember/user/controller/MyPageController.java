@@ -22,7 +22,7 @@ public class MyPageController {
 
     private final MyPageService myPageService;
 
-    /** 11.1 이상형 키워드 조��� */
+    /** 11.1 이상형 키워드 조회 */
     @GetMapping("/api/users/me/ideal-type")
     @Operation(summary = "이상형 키워드 조회 (마이페이지)", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<IdealTypeDetailResponse>> getIdealType(
@@ -57,7 +57,7 @@ public class MyPageController {
 
     /** 11.4 채팅 히스토리 조회 */
     @GetMapping("/api/users/me/history/chat-rooms")
-    @Operation(summary = "채팅 히스토리 (종료된 채팅���, 커서 페이징)", security = @SecurityRequirement(name = "bearerAuth"))
+    @Operation(summary = "채팅 히스토리 (종료된 채팅방, 커서 페이징)", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<ChatHistoryResponse>> getChatHistory(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam(required = false) Long cursor,
