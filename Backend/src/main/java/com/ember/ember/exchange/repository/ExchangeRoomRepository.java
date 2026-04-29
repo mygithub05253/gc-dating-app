@@ -40,7 +40,7 @@ public interface ExchangeRoomRepository extends JpaRepository<ExchangeRoom, Long
             SELECT r FROM ExchangeRoom r
             JOIN FETCH r.userA JOIN FETCH r.userB
             WHERE (r.userA.id = :userId OR r.userB.id = :userId)
-              AND r.status IN ('COMPLETED', 'EXPIRED', 'TERMINATED', 'ARCHIVED', 'ENDED')
+              AND r.status IN ('COMPLETED', 'EXPIRED', 'TERMINATED', 'ARCHIVED', 'CHAT_CONNECTED')
               AND (:cursor IS NULL OR r.id < :cursor)
             ORDER BY r.modifiedAt DESC
             LIMIT :size

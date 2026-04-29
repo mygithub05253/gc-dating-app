@@ -5,6 +5,7 @@ import com.ember.ember.global.response.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -22,6 +23,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     protected ResponseEntity<ApiResponse<Void>> handleValidationException(MethodArgumentNotValidException e) {
         log.warn("Validation failed: {}", e.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error(ErrorCode.BAD_REQUEST));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    protected ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException e) {
+        log.warn("잘못된 요청 본문: {}", e.getMessage());
         return ResponseEntity.badRequest().body(ApiResponse.error(ErrorCode.BAD_REQUEST));
     }
 
