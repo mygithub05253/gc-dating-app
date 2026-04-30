@@ -18,6 +18,7 @@ import com.ember.ember.exchange.repository.ExchangeRoomRepository;
 import com.ember.ember.exchange.repository.NextStepChoiceRepository;
 import com.ember.ember.global.exception.BusinessException;
 import com.ember.ember.global.response.ErrorCode;
+import com.ember.ember.global.security.xss.XssSanitizer;
 import com.ember.ember.notification.domain.Notification;
 import com.ember.ember.notification.repository.NotificationRepository;
 import com.ember.ember.user.domain.User;
@@ -191,7 +192,8 @@ public class ExchangeService {
                     .orElse(null);
         }
 
-        ExchangeDiary diary = ExchangeDiary.create(room, author, request.content(), turnNumber, parentDiary);
+        String sanitizedContent = XssSanitizer.sanitize(request.content());
+        ExchangeDiary diary = ExchangeDiary.create(room, author, sanitizedContent, turnNumber, parentDiary);
         exchangeDiaryRepository.save(diary);
 
         // 턴 진행
