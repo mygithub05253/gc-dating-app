@@ -148,7 +148,12 @@ public class UserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        FcmToken.DeviceType deviceType = FcmToken.DeviceType.valueOf(request.deviceType().toUpperCase());
+        FcmToken.DeviceType deviceType;
+        try {
+            deviceType = FcmToken.DeviceType.valueOf(request.deviceType().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
 
         // 기존 토큰이 있으면 갱신, 없으면 새로 생성
         var existing = fcmTokenRepository.findByUserIdAndDeviceType(userId, deviceType);
