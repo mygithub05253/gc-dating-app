@@ -14,6 +14,7 @@ import com.ember.ember.exchange.domain.ExchangeRoom.RoomStatus;
 import com.ember.ember.exchange.repository.ExchangeRoomRepository;
 import com.ember.ember.content.service.ContentScanResult;
 import com.ember.ember.content.service.ContentScanService;
+import com.ember.ember.global.security.xss.XssSanitizer;
 import com.ember.ember.global.exception.BusinessException;
 import com.ember.ember.global.response.ErrorCode;
 import com.ember.ember.notification.domain.Notification;
@@ -210,8 +211,9 @@ public class ChatService {
         User sender = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        // 금칙어 검열
-        ContentScanResult scanResult = contentScanService.scan(request.content());
+        // XSS 이스케이프 + 금칙어 검열
+        String sanitizedContent = XssSanitizer.sanitize(request.content());
+        ContentScanResult scanResult = contentScanService.scan(sanitizedContent);
         if (!scanResult.isAllowed()) {
             throw new BusinessException(ErrorCode.CONTENT_FILTERED);
         }
@@ -227,10 +229,10 @@ public class ChatService {
             type = MessageType.TEXT;
         }
 
-        Message message = Message.create(room, sender, request.content(), type, sequenceId);
+        Message message = Message.create(room, sender, sanitizedContent, type, sequenceId);
 
         // 외부 연락처 탐지
-        if (CONTACT_PATTERN.matcher(request.content()).find()) {
+        if (CONTACT_PATTERN.matcher(sanitizedContent).find()) {
             message.flag();
             log.warn("[ChatService] 외부 연락처 탐지 — roomId={}, senderId={}", roomId, userId);
         }

@@ -17,6 +17,7 @@ import com.ember.ember.user.domain.User;
 import com.ember.ember.user.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ember.ember.global.security.xss.XssSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -106,8 +107,9 @@ public class DiaryService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.TOPIC_NOT_FOUND));
         }
 
-        // 4. ContentScan 검열 — 차단 시 예외
-        ContentScanResult scanResult = contentScanService.scan(request.content());
+        // 4. XSS 이스케이프 + ContentScan 검열 — 차단 시 예외
+        String sanitizedContent = XssSanitizer.sanitize(request.content());
+        ContentScanResult scanResult = contentScanService.scan(sanitizedContent);
         if (!scanResult.isAllowed()) {
             log.warn("[DiaryService] 컨텐츠 검열 차단 — userId={}, reason={}", userId, scanResult.reason());
             throw new BusinessException(ErrorCode.CONTENT_FILTERED);
@@ -116,7 +118,7 @@ public class DiaryService {
         // 5. Diary 저장 (analysisStatus = PENDING 초기화)
         Diary diary = Diary.builder()
                 .user(user)
-                .content(request.content())
+                .content(sanitizedContent)
                 .date(today)
                 .topic(topic)
                 .build();
@@ -226,11 +228,14 @@ public class DiaryService {
             throw new BusinessException(ErrorCode.DIARY_NOT_EDITABLE);
         }
 
+        // XSS 이스케이프
+        String sanitizedContent = XssSanitizer.sanitize(request.content());
+
         // 수정 로그 저장
         diaryEditLogRepository.save(DiaryEditLog.builder()
                 .diary(diary)
                 .contentBefore(diary.getContent())
-                .contentAfter(request.content())
+                .contentAfter(sanitizedContent)
                 .editedAt(LocalDateTime.now())
                 .build());
 
@@ -239,7 +244,7 @@ public class DiaryService {
         cacheService.invalidate(String.format(CACHE_KEY_AI_DIARY, diaryId));
 
         // 본문 수정
-        diary.updateContent(request.content());
+        diary.updateContent(sanitizedContent);
 
         // 활동 로그 기록
         userActivityEventRepository.save(UserActivityEvent.builder()
