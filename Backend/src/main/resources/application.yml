@@ -140,6 +140,7 @@ ai:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+  override-with-generic-response: false
 
 ---
 # 개발 환경 (Supabase Cloud)
